@@ -122,10 +122,10 @@ install:
 script:
   - /usr/bin/python setup.py test
 
-#  - echo --- RUNNING DOCTESTS ---
-#  - cd $(pwd)/docs/iris
-#  - make doctest
+  - echo --- RUNNING DOCTESTS ---
+  - cd $(pwd)/docs/iris
+  - make doctest
 
-#  - echo --- RUNNING EXTESTS ---
-#  - make extest
+  - echo --- RUNNING EXTESTS ---
+  - make extest
 
