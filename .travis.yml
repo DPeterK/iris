@@ -123,11 +123,11 @@ install:
   - echo "$(pwd)/lib" > ~/.local/lib/python2.7/site-packages/iris.pth
   
 script:
-  - /usr/bin/python setup.py test
+#  - /usr/bin/python setup.py test
 
   - cd $(pwd)/docs/iris
-  - make clean html
-  - make doctest
+#  - make clean html
+#  - make doctest
 
   - make extest
 
