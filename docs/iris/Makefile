@@ -44,4 +44,4 @@ extest:
 	@echo
 	@echo "Running \"example_code/graphics\" tests..."
 	@echo
-	/usr/bin/python -m unittest discover -v -t . 
+	python -m unittest discover -v -t . 
