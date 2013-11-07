@@ -122,10 +122,10 @@ install:
 script:
   - /usr/bin/python setup.py test
 
-  - echo --- RUNNING DOCTESTS ---
+  - echo "--- RUNNING DOCTESTS ---"
   - cd $(pwd)/docs/iris
   - make doctest
 
-  - echo --- RUNNING EXTESTS ---
+  - ../../.travis_no_output echo "--- RUNNING EXTESTS ---"
   - make extest
 
