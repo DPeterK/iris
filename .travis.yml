@@ -119,13 +119,14 @@ install:
   - ./.travis_no_output /usr/bin/python setup.py pyke_rules
 
 # set pth for iris doctests
-  - mkdir -p ~/.local/lib/python2.7/site-packages
-  - echo "$(pwd)/lib" > !$/iris.pth
+#  - mkdir -p ~/.local/lib/python2.7/site-packages
+#  - echo "$(pwd)/lib" > ~/.local/lib/python2.7/site-packages/iris.pth
   
 script:
   - /usr/bin/python setup.py test
 
   - cd $(pwd)/docs/iris
+  - make clean html
   - make doctest
 
   - make extest
