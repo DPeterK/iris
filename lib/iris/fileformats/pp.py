@@ -55,6 +55,7 @@ _load_rules = None
 _save_rules = None
 
 
+IMDI = -32768
 PP_HEADER_DEPTH = 256
 PP_WORD_DEPTH = 4
 NUM_LONG_HEADERS = 45
@@ -352,7 +353,7 @@ class SplittableInt(object):
     >>> print three_six_two[2]
     3
 
-    .. note:: No support for negative numbers
+    .. note:: No support for negative numbers other than UM IMDI (-32768).
 
     """
     def __init__(self, value, name_mapping_dict=None):
@@ -374,16 +375,20 @@ class SplittableInt(object):
                 1934
 
         """
-        if value < 0:
-            raise ValueError('Negative numbers not supported with splittable integers object')
-
         # define the name lookup first (as this is the way __setattr__ is plumbed)
         #: A dictionary mapping special attribute names on this object
         #: to the slices/indices required to access them.
         self._name_lookup = name_mapping_dict or {}
-        self._value = value
 
-        self._calculate_str_value_from_value()
+        if value == IMDI:
+            self._value = None
+        elif value < 0:
+            raise ValueError('Negative numbers not supported with splittable integers object')
+        else:
+            self._value = value
+
+        if self._value is not None:
+            self._calculate_str_value_from_value()
 
     def __int__(self):
         return int(self._value)
@@ -546,7 +551,8 @@ class BitwiseInt(SplittableInt):
             if (value >> self._num_bits) > 0:
                 raise ValueError("Not enough bits to store value")
 
-        self._set_flags_from_value()
+        if self._value is not None:
+            self._set_flags_from_value()
 
     def _set_flags_from_value(self):
         all_flags = []
