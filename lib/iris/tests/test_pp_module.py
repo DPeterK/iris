@@ -491,6 +491,10 @@ class TestSplittableInt(unittest.TestCase):
         except ValueError, err:
             self.assertEqual(str(err), 'Negative numbers not supported with splittable integers object')
 
+    def test_imdi_handling(self):
+        t = pp.SplittableInt(pp.IMDI)
+        self.assertIsNone(t._value)
+
             
 class TestSplittableIntEquality(unittest.TestCase):
     def test_not_implemented(self):
