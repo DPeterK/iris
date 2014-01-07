@@ -178,24 +178,14 @@ def _backslash_path():
     return Path(vertices, codes)
 
 
-def _wedge_fix(wedge_path):
-    # Fixes the problem with Path.wedge where it doesn't initialise the first,
-    # and last two vertices.
-    # This fix should not have any side-effects once Path.wedge has been fixed,
-    # but will then be redundant and should be removed.
-    wedge_path.vertices[0] = 0
-    wedge_path.vertices[-2:] = 0
-    return wedge_path
-
-
 CLOUD_COVER = {
     0: [_ring_path()],
     1: [_ring_path(), _vertical_bar_path()],
-    2: [_ring_path(), _wedge_fix(Path.wedge(0, 90))],
-    3: [_ring_path(), _wedge_fix(Path.wedge(0, 90)), _vertical_bar_path()],
+    2: [_ring_path(), Path.wedge(0, 90)],
+    3: [_ring_path(), Path.wedge(0, 90), _vertical_bar_path()],
     4: [_ring_path(), Path.unit_circle_righthalf()],
     5: [_ring_path(), Path.unit_circle_righthalf(), _left_bar_path()],
-    6: [_ring_path(), _wedge_fix(Path.wedge(-180, 90))],
+    6: [_ring_path(), Path.wedge(-180, 90)],
     7: [_slot_path()],
     8: [Path.unit_circle()],
     9: [_ring_path(), _slash_path(), _backslash_path()],
