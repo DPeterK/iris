@@ -24,6 +24,7 @@ Currently relies on matplotlib for image processing so limited to PNG format.
 
 import os.path
 import shutil
+import sys
 
 import matplotlib.pyplot as plt
 import matplotlib.image as mimg
@@ -80,4 +81,8 @@ def step_over_diffs():
 
 
 if __name__ == '__main__':
+    # Keep the mpl backend as TkAgg in iris.tests, which prevents memory
+    # issues with lots of differing test images:
+    sys.argv.append('-d')
+
     step_over_diffs()
