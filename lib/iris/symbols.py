@@ -191,7 +191,7 @@ def _wedge_fix(wedge_path):
 
     This is fixed in MPL v1.3. A check is performed to allow for backward
     compatibility with MPL v1.2.x.
-    
+
     '''
     if MPL_VERSION != '1.3.0':
         wedge_path.vertices[0] = 0
