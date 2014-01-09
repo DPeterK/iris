@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2014, Met Office
 #
 # This file is part of Iris.
 #
@@ -874,6 +874,32 @@ class Linear1dExtrapolator(object):
         .. note:: These are stored with the interpolator.axis last.
 
         """
+        # Roll interpolator.axis to the end if scipy no longer does it for us.
+        if not self._interp1d_rolls_y():
+            self.y = np.rollaxis(self.y, self._interpolator.axis, self.y.ndim)
+
+    def _interp1d_rolls_y(self):
+        '''
+        Compares the array y passed into :class:`scipy.interpolate.interp1d`
+        to the class's internal represenation of y.
+
+        SciPy v0.13.x+ no longer rolls the axis of its internal representation
+        of y so we test for this occurring to prevent us subsequently
+        extrapolating along the wrong axis.
+
+        For further information on this change see, for example;
+            * https://github.com/scipy/scipy/commit/0d906d0fc54388464603c63119b9e35c9a9c4601
+              (the commit that introduced the change in behaviour).
+            * https://github.com/scipy/scipy/issues/2621
+              (a discussion on the change - note the issue is not resolved
+              at time of writing).
+
+        '''
+        y = np.arange(12).reshape(3, 4)
+        f = interp1d(np.arange(3), y, axis=0)
+        # Note: if the initial shape of y and the shape internal to interp1d
+        # are *not* the same then scipy.interp1d rolls y, hence this return:
+        return y.shape != f.y.shape
 
     def all_points_in_range(self, requested_x):
         """Given the x points, do all of the points sit inside the interpolation range."""
@@ -897,12 +923,24 @@ class Linear1dExtrapolator(object):
             lt = np.where(requested_x < self.x[0])[0]
             ok = np.where( (requested_x >= self.x[0]) & (requested_x <= self.x[-1]) )[0]
 
-            data_shape = list(self._interpolator.y.shape)
+            #import pdb; pdb.set_trace()
+            #if self._interp1d_rolls_y():
+            data_shape = list(self.y.shape)
+            #else:
+            #    # If y ISN'T rolled by interp1d we need to roll data shape,
+            #    # because the original code here was based on something wrong.
+            #    data_shape = list(np.roll(np.array(self.y.shape), -1))
+            #print data_shape
             data_shape[-1] = len(requested_x)
+            #print data_shape
             result = np.empty(data_shape, dtype=self._interpolator(self.x[0]).dtype)
+            #print result
+            #print self._interpolator(self.x[0]).dtype
+            #print self.y.ndim
 
             # Make a variable to represent the slice into the resultant data. (This will be updated in each of gt, lt & ok)
-            interpolator_result_index = [slice(None, None)] * self._interpolator.y.ndim
+            interpolator_result_index = [slice(None, None)] * self.y.ndim
+            #print interpolator_result_index
 
             if len(ok) != 0:
                 interpolator_result_index[-1] = ok
@@ -919,6 +957,7 @@ class Linear1dExtrapolator(object):
                 interpolator_result_index[-1] = lt
 
                 grad = (self.y[..., 1:2] - self.y[..., 0:1]) / (self.x[1] - self.x[0])
+                #print grad
                 result[interpolator_result_index] = self.y[..., 0:1] + (requested_x[lt] - self.x[0]) * grad
 
             if len(gt) != 0:
