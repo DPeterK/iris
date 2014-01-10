@@ -923,24 +923,12 @@ class Linear1dExtrapolator(object):
             lt = np.where(requested_x < self.x[0])[0]
             ok = np.where( (requested_x >= self.x[0]) & (requested_x <= self.x[-1]) )[0]
 
-            #import pdb; pdb.set_trace()
-            #if self._interp1d_rolls_y():
             data_shape = list(self.y.shape)
-            #else:
-            #    # If y ISN'T rolled by interp1d we need to roll data shape,
-            #    # because the original code here was based on something wrong.
-            #    data_shape = list(np.roll(np.array(self.y.shape), -1))
-            #print data_shape
             data_shape[-1] = len(requested_x)
-            #print data_shape
             result = np.empty(data_shape, dtype=self._interpolator(self.x[0]).dtype)
-            #print result
-            #print self._interpolator(self.x[0]).dtype
-            #print self.y.ndim
 
             # Make a variable to represent the slice into the resultant data. (This will be updated in each of gt, lt & ok)
             interpolator_result_index = [slice(None, None)] * self.y.ndim
-            #print interpolator_result_index
 
             if len(ok) != 0:
                 interpolator_result_index[-1] = ok
@@ -957,7 +945,6 @@ class Linear1dExtrapolator(object):
                 interpolator_result_index[-1] = lt
 
                 grad = (self.y[..., 1:2] - self.y[..., 0:1]) / (self.x[1] - self.x[0])
-                #print grad
                 result[interpolator_result_index] = self.y[..., 0:1] + (requested_x[lt] - self.x[0]) * grad
 
             if len(gt) != 0:
