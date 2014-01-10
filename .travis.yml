@@ -40,6 +40,7 @@ install:
   - ./.travis_no_output sudo /usr/bin/pip install --use-mirrors shapely nose
   - ./.travis_no_output sudo /usr/bin/pip install --use-mirrors pyshp pep8 mock
   - ./.travis_no_output sudo /usr/bin/pip install --use-mirrors setuptools
+  - ./.travis_no_output sudo /usr/bin/pip install numpy==1.7.0
   - ./.travis_no_output sudo /usr/bin/pip install scipy==0.13.2
   - ./.travis_no_output sudo /usr/bin/pip install matplotlib==1.2.0
   - ./.travis_no_output sudo apt-get install libgeos-dev libproj-dev
