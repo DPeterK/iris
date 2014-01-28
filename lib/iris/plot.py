@@ -245,16 +245,24 @@ def _draw_2d_from_bounds(draw_method_name, cube, *args, **kwargs):
         # XXX: Watch out for non-contiguous bounds.
         if u_coord:
             u = u_coord.contiguous_bounds()
+            u = _fixup_dates(u_coord, u)
         else:
             u = np.arange(data.shape[1] + 1)
         if v_coord:
             v = v_coord.contiguous_bounds()
+            v = _fixup_dates(v_coord, v)
         else:
             v = np.arange(data.shape[0] + 1)
 
         if plot_defn.transpose:
             u = u.T
             v = v.T
+
+        # Patch matplotlib to accept datetimes. 
+        # Fixed by mpl #2199, available in mpl v1.4.
+        plt.gca()._process_unit_info(xdata=u, ydata=v)
+        u = plt.gca().convert_xunits(u)
+        v = plt.gca().convert_yunits(v)
 
         u, v = _broadcast_2d(u, v)
         draw_method = getattr(plt, draw_method_name)
