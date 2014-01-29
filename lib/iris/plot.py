@@ -258,7 +258,7 @@ def _draw_2d_from_bounds(draw_method_name, cube, *args, **kwargs):
             u = u.T
             v = v.T
 
-        # Patch matplotlib to accept datetimes. 
+        # Patch matplotlib to accept datetimes.
         # Fixed by mpl #2199, available in mpl v1.4.
         plt.gca()._process_unit_info(xdata=u, ydata=v)
         u = plt.gca().convert_xunits(u)

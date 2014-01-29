@@ -24,6 +24,7 @@ from functools import wraps
 import types
 import warnings
 
+import matplotlib.dates as mpl_dates
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -350,6 +351,36 @@ class TestAttributePositive(tests.GraphicsTest):
         cube = iris.load_cube(path)[0, :, 42, :]
         qplt.pcolormesh(cube)
         self.check_graphic()
+
+
+@iris.tests.skip_data
+class TestTimeAxis(tests.GraphicsTest):
+    def setUp(self):
+        test_data_path = tests.get_data_path(('PP', 'ukV1', 'ukVpmslont.pp'))
+        self.cube = iris.load_cube(test_data_path)[:, :, 128]
+        self.cube.remove_coord('forecast_period')
+
+    def plot_common(self):
+        fmt_str = '%Y-%m-%d %Hh'
+        plt.gca().xaxis.set_major_formatter(mpl_dates.DateFormatter(fmt_str))
+        plt.gcf().autofmt_xdate()
+        self.check_graphic()
+
+    def test_contour_time_axis(self):
+        iplt.contour(self.cube)
+        self.plot_common()
+
+    def test_contourf_time_axis(self):
+        iplt.contourf(self.cube)
+        self.plot_common()
+
+    def test_pcolor_time_axis(self):
+        iplt.pcolor(self.cube)
+        self.plot_common()
+
+    def test_pcolormesh_time_axis(self):
+        iplt.pcolormesh(self.cube)
+        self.plot_common()
 
 
 # Caches _load_4d_testcube so subsequent calls are faster
