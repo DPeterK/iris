@@ -354,33 +354,44 @@ class TestAttributePositive(tests.GraphicsTest):
 
 
 @iris.tests.skip_data
-class TestTimeAxis(tests.GraphicsTest):
+class TestTimeAxis(tests.IrisTest):
     def setUp(self):
+        # Load data from Iris tests with a time coord and select a 2D time/lat
+        # slice from it.
         test_data_path = tests.get_data_path(('PP', 'ukV1', 'ukVpmslont.pp'))
         self.cube = iris.load_cube(test_data_path)[:, :, 128]
         self.cube.remove_coord('forecast_period')
 
-    def plot_common(self):
-        fmt_str = '%Y-%m-%d %Hh'
-        plt.gca().xaxis.set_major_formatter(mpl_dates.DateFormatter(fmt_str))
-        plt.gcf().autofmt_xdate()
-        self.check_graphic()
+    def plot_common(self, expected_xlim):
+        # The common steps from each plot test.
+        xax = plt.gca().xaxis
+        self.assertTrue(isinstance(xax.get_major_locator(),
+                        mpl_dates.AutoDateLocator))
+        self.assertTrue(isinstance(xax.get_major_formatter(),
+                        mpl_dates.AutoDateFormatter))
+        self.assertEqual(plt.gca().get_xlim(), expected_xlim)
 
     def test_contour_time_axis(self):
         iplt.contour(self.cube)
-        self.plot_common()
+        plt.gca().xaxis.axis_date()
+        expected_xlim = (733811.125, 733812.125)
+        self.plot_common(expected_xlim)
 
     def test_contourf_time_axis(self):
         iplt.contourf(self.cube)
-        self.plot_common()
+        plt.gca().xaxis.axis_date()
+        expected_xlim = (733811.125, 733812.125)
+        self.plot_common(expected_xlim)
 
     def test_pcolor_time_axis(self):
         iplt.pcolor(self.cube)
-        self.plot_common()
+        expected_xlim = (733811.10416666663, 733812.14583333337)
+        self.plot_common(expected_xlim)
 
     def test_pcolormesh_time_axis(self):
         iplt.pcolormesh(self.cube)
-        self.plot_common()
+        expected_xlim = (733811.10416666663, 733812.14583333337)
+        self.plot_common(expected_xlim)
 
 
 # Caches _load_4d_testcube so subsequent calls are faster
