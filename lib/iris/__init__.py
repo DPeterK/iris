@@ -108,6 +108,7 @@ import iris.cube
 import iris._constraints
 import iris.fileformats
 import iris.io
+import iris.regrid
 
 
 # Iris revision.

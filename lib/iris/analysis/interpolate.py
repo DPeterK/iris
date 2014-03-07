@@ -322,7 +322,7 @@ def extract_nearest_neighbour(cube, sample_points):
     return cube[nearest_neighbour_indices(cube, sample_points)]
 
 
-def nearest_neighbour_data_value(cube, sample_points):
+def nearest_neighbour_data_value(cube, sample_points, indices=None):
     """
     Returns the data value closest to the given coordinate point values.
 
@@ -351,7 +351,8 @@ def nearest_neighbour_data_value(cube, sample_points):
         The data value at the point in the cube closest to the supplied coordinate values.
 
     """
-    indices = nearest_neighbour_indices(cube, sample_points)
+    if indices is None:
+        indices = nearest_neighbour_indices(cube, sample_points)
     for ind in indices:
         if isinstance(ind, slice):
             raise ValueError('The sample points given (%s) were not specific enough to return a '
