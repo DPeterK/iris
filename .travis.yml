@@ -43,6 +43,7 @@ install:
   # Customise the testing environment
   # ---------------------------------
   - conda config --add channels scitools
+  - conda config --add channels dkillick
   # Start with all the mandatory dependencies
   - conda install biggus
   - conda install cartopy matplotlib=1.3.1
@@ -59,7 +60,7 @@ install:
   - conda install pep8
   - conda install sphinx
   # Optional iris dependencies
-  - conda install ecmwf_grib=1.9.16
+  - conda install ecmwf_grib=1.12.1
   - conda install gdal
   - conda install libmo_unpack
   - conda install pandas=0.12.0
