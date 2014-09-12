@@ -47,7 +47,7 @@ install:
   - conda install biggus
   - conda install cartopy matplotlib=1.3.1
   - conda install netcdf4
-  - conda install numpy
+  - conda install numpy=1.8.2
   - conda install pyke
   - conda install udunits=2
   # Iris build dependencies
