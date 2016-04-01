@@ -1,0 +1,8 @@
+{
+    "arch": "x86_64", 
+    "cpu": "Intel(R) Xeon(R) CPU           E5520  @ 2.27GHz", 
+    "machine": "eld434", 
+    "os": "Linux 2.6.32-573.18.1.el6.x86_64", 
+    "ram": "6GB", 
+    "version": 1
+}
