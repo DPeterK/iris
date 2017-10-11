@@ -918,6 +918,63 @@ class Aggregator(_Aggregator):
         cube.add_cell_method(cell_method)
 
 
+class IndexAggregator(Aggregator):
+    """
+    The :class:`IndexAggregator` provides aggregation functionality that may
+    return the index at which the statistic was found.
+
+    """
+    def __init__(self, cell_method, call_func,
+                 units_func=None, lazy_func=None, index_func=None,
+                 **kwargs):
+        self.index_func = index_func
+        Aggregator.__init__(self, cell_method, call_func,
+                            units_func=units_func, lazy_func=lazy_func,
+                            **kwargs)
+
+        self._cube = None
+
+    @property
+    def cube(self):
+        return self._cube
+
+    @cube.setter
+    def cube(self, value):
+        self._cube = value
+
+    def aggregate(self, data, axis, **kwargs):
+        data = Aggregator.aggregate(self, data, axis, **kwargs)
+        if self.index_func is not None:
+            indices = self.index_func(data, axis)
+            result = [data, indices]
+        else:
+            result = data
+        return result
+
+    def post_process(self, collapsed_cube, data_result, coords, **kwargs):
+        if self.index_func is not None:
+            data, indices = data_result
+            collapse_coord = kwargs.get('collapse_coord', None)
+            if collapse_coord is not None:
+                dim_inds = [collapse_coord.points[p]
+                            for p in indices.reshape(-1)]
+                dim_inds_arr = np.array(dim_inds).reshape(indices.shape)
+                coord_name = '{}_of_{}'.format(self.cell_method,
+                                               collapse_coord.name())
+            else:
+                dim_inds_arr = indices
+                coord_name = self.cell_method
+            dim_inds_coord = iris.coords.AuxCoord(dim_inds_arr,
+                                                  units=collapse_coord.units,
+                                                  long_name=coord_name)
+            collapsed_cube.add_aux_coord(dim_inds_coord,
+                                         range(collapsed_cube.ndim))
+        else:
+            data = data_result
+        return Aggregator.post_process(self, collapsed_cube, data, coords,
+                                       **kwargs)
+
+
 class WeightedAggregator(Aggregator):
     """
     Convenience class that supports common weighted aggregation functionality.
