@@ -3249,6 +3249,13 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                 for coord in lat_match:
                     warnings.warn(msg.format(coord.name()))
 
+        if (isinstance(aggregator, iris.analysis.IndexAggregator) and
+                kwargs.get('statistic_inds') and
+                len(coords) > 1):
+            emsg = ('Attempting to collapse more than one coordinate and '
+                    'return indices of statistic.')
+            raise ValueError(emsg)
+
         # Determine the dimensions we need to collapse (and those we don't)
         if aggregator.cell_method == 'peak':
             dims_to_collapse = [list(self.coord_dims(coord))
@@ -3353,8 +3360,16 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                                                **kwargs)
         aggregator.update_metadata(collapsed_cube, coords, axis=collapse_axis,
                                    **kwargs)
-        result = aggregator.post_process(collapsed_cube, data_result, coords,
-                                         **kwargs)
+        if (isinstance(aggregator, iris.analysis.IndexAggregator) and
+                kwargs.get('statistic_inds')):
+            # To get coord indices at which the statistic was found we need
+            # to make the post-processor aware of the collapse coord.
+            kwargs['collapse_coord'] = coords[0]
+            result = aggregator.post_process(collapsed_cube, data_result,
+                                             coords, **kwargs)
+        else:
+            result = aggregator.post_process(collapsed_cube, data_result,
+                                             coords, **kwargs)
         return result
 
     def aggregated_by(self, coords, aggregator, **kwargs):

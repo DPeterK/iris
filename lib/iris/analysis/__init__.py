@@ -924,46 +924,34 @@ class IndexAggregator(Aggregator):
     return the index at which the statistic was found.
 
     """
-    def __init__(self, cell_method, call_func,
-                 units_func=None, lazy_func=None, index_func=None,
-                 **kwargs):
+    def __init__(self, cell_method, call_func, index_func,
+                 units_func=None, lazy_func=None, **kwargs):
         self.index_func = index_func
+
         Aggregator.__init__(self, cell_method, call_func,
                             units_func=units_func, lazy_func=lazy_func,
                             **kwargs)
 
-        self._cube = None
-
-    @property
-    def cube(self):
-        return self._cube
-
-    @cube.setter
-    def cube(self, value):
-        self._cube = value
-
     def aggregate(self, data, axis, **kwargs):
-        data = Aggregator.aggregate(self, data, axis, **kwargs)
-        if self.index_func is not None:
+        statistic_inds = kwargs.pop('statistic_inds', False)
+        aggregation = Aggregator.aggregate(self, data, axis, **kwargs)
+        if statistic_inds:
             indices = self.index_func(data, axis)
-            result = [data, indices]
+            result = [aggregation, indices]
         else:
-            result = data
+            result = aggregation
         return result
 
     def post_process(self, collapsed_cube, data_result, coords, **kwargs):
-        if self.index_func is not None:
+        statistic_inds = kwargs.get('statistic_inds', False)
+        if statistic_inds:
             data, indices = data_result
-            collapse_coord = kwargs.get('collapse_coord', None)
-            if collapse_coord is not None:
-                dim_inds = [collapse_coord.points[p]
-                            for p in indices.reshape(-1)]
-                dim_inds_arr = np.array(dim_inds).reshape(indices.shape)
-                coord_name = '{}_of_{}'.format(self.cell_method,
-                                               collapse_coord.name())
-            else:
-                dim_inds_arr = indices
-                coord_name = self.cell_method
+            collapse_coord = kwargs.get('collapse_coord')
+            dim_inds = [collapse_coord.points[p]
+                        for p in indices.reshape(-1)]
+            dim_inds_arr = np.array(dim_inds).reshape(indices.shape)
+            coord_name = '{}_of_{}'.format(self.cell_method,
+                                           collapse_coord.name())
             dim_inds_coord = iris.coords.AuxCoord(dim_inds_arr,
                                                   units=collapse_coord.units,
                                                   long_name=coord_name)
@@ -1477,7 +1465,7 @@ This aggregator handles masked data.
 """
 
 
-MAX = Aggregator('maximum', ma.max)
+MAX = IndexAggregator('maximum', ma.max, ma.argmax)
 """
 An :class:`~iris.analysis.Aggregator` instance that calculates
 the maximum over a :class:`~iris.cube.Cube`, as computed by
