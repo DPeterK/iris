@@ -3671,6 +3671,10 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                 'must map to one data dimension.' % coord.name())
         dimension = dimension[0]
 
+        agg_with_index = \
+            (isinstance(aggregator, iris.analysis.IndexAggregator) and
+             kwargs.get('statistic_inds') is not None)
+
         # Use indexing to get a result-cube of the correct shape.
         # NB. This indexes the data array which is wasted work.
         # As index-to-get-shape-then-fiddle is a common pattern, perhaps
@@ -3742,6 +3746,8 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         data_result = aggregator.aggregate(rolling_window_data,
                                            axis=dimension + 1,
                                            **kwargs)
+        if agg_with_index:
+            kwargs['collapse_coord'] = coord
         result = aggregator.post_process(new_cube, data_result, [coord],
                                          **kwargs)
         return result
