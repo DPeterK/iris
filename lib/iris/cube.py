@@ -3250,7 +3250,7 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                     warnings.warn(msg.format(coord.name()))
 
         if (isinstance(aggregator, iris.analysis.IndexAggregator) and
-                kwargs.get('statistic_inds') and
+                kwargs.get('statistic_inds') is not None and
                 len(coords) > 1):
             emsg = ('Attempting to collapse more than one coordinate and '
                     'return indices of statistic.')
@@ -3361,7 +3361,7 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         aggregator.update_metadata(collapsed_cube, coords, axis=collapse_axis,
                                    **kwargs)
         if (isinstance(aggregator, iris.analysis.IndexAggregator) and
-                kwargs.get('statistic_inds')):
+                kwargs.get('statistic_inds') is not None):
             # To get coord indices at which the statistic was found we need
             # to make the post-processor aware of the collapse coord.
             kwargs['collapse_coord'] = coords[0]
@@ -3448,7 +3448,17 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
             raise ValueError('Invalid Aggregation, aggregated_by() cannot use'
                              ' weights.')
 
+        agg_with_index = \
+            (isinstance(aggregator, iris.analysis.IndexAggregator) and
+             kwargs.get('statistic_inds') is not None)
+
         coords = self._as_list_of_coords(coords)
+
+        if agg_with_index and len(coords) > 1:
+            emsg = ('Attempting to collapse more than one coordinate and '
+                    'return indices of statistic.')
+            raise ValueError(emsg)
+
         for coord in sorted(coords, key=lambda coord: coord._as_defn()):
             if coord.ndim > 1:
                 msg = 'Cannot aggregate_by coord %s as it is ' \
@@ -3503,16 +3513,26 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
             result = aggregator.aggregate(groupby_sub_cube.data,
                                           axis=dimension_to_groupby,
                                           **kwargs)
+            if agg_with_index:
+                data, stat_inds = result
+            else:
+                data = result
 
             # Determine aggregation result data type for the aggregate-by cube
             # data on first pass.
             if i == 0:
                 if ma.isMaskedArray(self.data):
-                    aggregateby_data = ma.zeros(data_shape, dtype=result.dtype)
+                    aggregateby_data = ma.zeros(data_shape, dtype=data.dtype)
                 else:
-                    aggregateby_data = np.zeros(data_shape, dtype=result.dtype)
+                    aggregateby_data = np.zeros(data_shape, dtype=data.dtype)
+                if agg_with_index:
+                    stat_inds_data = aggregateby_data.copy().astype(np.int)
 
-            aggregateby_data[tuple(cube_slice)] = result
+            if agg_with_index:
+                aggregateby_data[tuple(cube_slice)] = data
+                stat_inds_data[tuple(cube_slice)] = stat_inds
+            else:
+                aggregateby_data[tuple(cube_slice)] = data
 
         # Add the aggregation meta data to the aggregate-by cube.
         aggregator.update_metadata(aggregateby_cube,
@@ -3532,9 +3552,15 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                                                dimension_to_groupby)
 
         # Attach the aggregate-by data into the aggregate-by cube.
-        aggregateby_cube = aggregator.post_process(aggregateby_cube,
-                                                   aggregateby_data,
-                                                   coords, **kwargs)
+        if agg_with_index:
+            data = [aggregateby_data, stat_inds_data]
+            kwargs['collapse_coord'] = coords[0]
+            aggregateby_cube = aggregator.post_process(aggregateby_cube,
+                                                       data, coords, **kwargs)
+        else:
+            aggregateby_cube = aggregator.post_process(aggregateby_cube,
+                                                       aggregateby_data,
+                                                       coords, **kwargs)
 
         return aggregateby_cube
 

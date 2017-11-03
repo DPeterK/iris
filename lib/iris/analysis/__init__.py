@@ -947,9 +947,18 @@ class IndexAggregator(Aggregator):
         if statistic_inds:
             data, indices = data_result
             collapse_coord = kwargs.get('collapse_coord')
+            mask = None
+            if ma.isMaskedArray(indices):
+                mask = indices.mask
+                fill_value = indices.fill_value
+                indices = indices.filled(0)
             dim_inds = [collapse_coord.points[p]
                         for p in indices.reshape(-1)]
             dim_inds_arr = np.array(dim_inds).reshape(indices.shape)
+            if mask is not None:
+                dim_inds_arr = ma.masked_array(dim_inds_arr,
+                                               mask=mask,
+                                               fill_value=fill_value)
             coord_name = '{}_of_{}'.format(self.cell_method,
                                            collapse_coord.name())
             dim_inds_coord = iris.coords.AuxCoord(dim_inds_arr,
