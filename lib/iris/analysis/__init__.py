@@ -920,8 +920,20 @@ class Aggregator(_Aggregator):
 
 class IndexAggregator(Aggregator):
     """
-    The :class:`IndexAggregator` provides aggregation functionality that may
+    This aggregator provides aggregation functionality that may
     return the index at which the statistic was found.
+
+    .. note::
+        This aggregator does **not** support masked data (as Iris does not
+        support masked data in coordinates and the indices of the statistic
+        are recorded in a coordinate). To apply the collapsed cube mask to the
+        index of statistic coord you can do something like the following::
+
+            >>> max_inds = my_cube.collapsed('time', iris.analysis.MAX, \
+                                             statistic_inds=True)
+            >>> unmasked_inds = max_inds.coord('maximum_of_time').points
+            >>> masked_inds = np.ma.masked_array(unmasked_inds, \
+                                                 mask=max_inds.data.mask)
 
     """
     def __init__(self, cell_method, call_func, index_func,
@@ -950,12 +962,6 @@ class IndexAggregator(Aggregator):
             dim_inds = [collapse_coord.points[p]
                         for p in indices.reshape(-1)]
             dim_inds_arr = np.array(dim_inds).reshape(indices.shape)
-            if ma.isMaskedArray(data):
-                mask = data.mask
-                fill_value = data.fill_value
-                dim_inds_arr = ma.masked_array(dim_inds_arr,
-                                               mask=mask,
-                                               fill_value=fill_value)
             coord_name = '{}_of_{}'.format(self.cell_method,
                                            collapse_coord.name())
             dim_inds_coord = iris.coords.AuxCoord(dim_inds_arr,
