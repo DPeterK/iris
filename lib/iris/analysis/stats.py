@@ -25,6 +25,7 @@ from six.moves import (filter, input, map, range, zip)  # noqa
 import numpy as np
 import numpy.ma as ma
 import iris
+from iris._lazy_data import LAZY_SQRT as da_sqrt
 from iris.util import broadcast_to_shape
 
 
@@ -151,16 +152,18 @@ def pearsonr(cube_a, cube_b, corr_coords=None, weights=None, mdtol=1.,
     s2 = cube_2 - cube_2.collapsed(corr_coords, iris.analysis.MEAN,
                                    weights=weights_2)
 
-    covar = (s1*s2).collapsed(corr_coords, iris.analysis.SUM,
-                              weights=weights_1, mdtol=mdtol)
+    covar_data = s1.lazy_data() * s2.lazy_data()
+    covar_cube = s1.copy(data=covar_data)
+    covar = covar_cube.collapsed(corr_coords, iris.analysis.SUM,
+                                 weights=weights_1, mdtol=mdtol)
     var_1 = (s1**2).collapsed(corr_coords, iris.analysis.SUM,
                               weights=weights_1)
     var_2 = (s2**2).collapsed(corr_coords, iris.analysis.SUM,
                               weights=weights_2)
 
-    denom = iris.analysis.maths.apply_ufunc(np.sqrt, var_1*var_2,
-                                            new_unit=covar.units)
+    denom = da_sqrt(var_1.lazy_data() * var_2.lazy_data())
     corr_cube = covar / denom
     corr_cube.rename("Pearson's r")
+    corr_cube.units = covar.units
 
     return corr_cube

@@ -40,6 +40,9 @@ class Test(tests.IrisTest):
         self.cube_a = cube_temp[0:6]
         self.cube_b = cube_temp[20:26]
         self.cube_b.replace_coord(self.cube_a.coord('time').copy())
+        self.cube_1d = self.cube_b.copy()[:, 0, 0]
+        self.cube_1d.remove_coord('latitude')
+        self.cube_1d.remove_coord('longitude')
         cube_temp = self.cube_a.copy()
         cube_temp.coord('latitude').guess_bounds()
         cube_temp.coord('longitude').guess_bounds()
@@ -149,6 +152,19 @@ class Test(tests.IrisTest):
         cube_small_2d.data.mask[0, 0] = 1
         r = stats.pearsonr(cube_small, cube_small_2d, common_mask=True)
         self.assertArrayAlmostEqual(r.data, np.array([1., 1.]))
+
+    def test_differing_ndims(self):
+        # Check that we can run Pearson's on two cubes with a common named
+        # dimension but different numbers of dimensions overall.
+        # First reduce the size of the big cube's horizontal dimensions to
+        # minimise the size of the result.
+        cube_a = self.cube_a[..., ::64, ::64]
+        r = stats.pearsonr(cube_a, self.cube_1d, 'time')
+        expected = [
+            [-0.48232710, -0.48232710, -0.48232710, -0.48232710, -0.48232710],
+            [-0.07516634, 0.23314384, 0.14100052, 0.01946429, -0.24650747],
+            [0.07415505, -0.14140046, 0.10330920, 0.22831163, -0.05596465]]
+        self.assertArrayAlmostEqual(r.data, expected)
 
 
 if __name__ == '__main__':

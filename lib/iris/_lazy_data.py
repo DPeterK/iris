@@ -31,6 +31,10 @@ import numpy as np
 import numpy.ma as ma
 
 
+# Expose dask array functions here to avoid importing dask elsewhere.
+LAZY_SQRT = da.sqrt
+
+
 def is_lazy_data(data):
     """
     Return whether the argument is an Iris 'lazy' data array.
