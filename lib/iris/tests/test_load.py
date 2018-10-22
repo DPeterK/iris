@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -18,6 +18,10 @@
 Test the main loading API.
 
 """
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
 
@@ -25,7 +29,7 @@ import iris
 import iris.io
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestLoad(tests.IrisTest):
     def test_normal(self):
         paths = (
@@ -41,8 +45,8 @@ class TestLoad(tests.IrisTest):
         )
         with self.assertRaises(IOError) as error_trap:
             cubes = iris.load(paths)
-        self.assertTrue(error_trap.exception.message.startswith(
-            'One or more of the files specified did not exist'))
+        self.assertIn('One or more of the files specified did not exist',
+                      str(error_trap.exception))
 
     def test_nonexist_wild(self):
         paths = (
@@ -51,8 +55,8 @@ class TestLoad(tests.IrisTest):
         )
         with self.assertRaises(IOError) as error_trap:
             cubes = iris.load(paths)
-        self.assertTrue(error_trap.exception.message.startswith(
-            'One or more of the files specified did not exist'))
+        self.assertIn('One or more of the files specified did not exist',
+                      str(error_trap.exception))
 
     def test_bogus(self):
         paths = (
@@ -77,7 +81,7 @@ class TestLoad(tests.IrisTest):
         self.assertEqual(len(cubes), 2)
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestLoadCube(tests.IrisTest):
     def test_normal(self):
         paths = (
@@ -101,7 +105,7 @@ class TestLoadCube(tests.IrisTest):
             iris.load_cube(paths)
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestLoadCubes(tests.IrisTest):
     def test_normal(self):
         paths = (

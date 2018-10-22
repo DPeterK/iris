@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -15,12 +15,16 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
 
 import operator
+import math
 
+import cf_units
 import numpy as np
 import numpy.ma as ma
 
@@ -31,7 +35,7 @@ import iris.exceptions
 import iris.tests.stock
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestBasicMaths(tests.IrisTest):
     def setUp(self):
         self.cube = iris.tests.stock.global_pp()
@@ -66,13 +70,6 @@ class TestBasicMaths(tests.IrisTest):
 
         # Check that the subtraction has had no effect on the original
         self.assertCML(e, ('analysis', 'maths_original.cml'))
-
-    def test_minus_in_need_of_transpose(self):
-        a = self.cube
-        e = self.cube.copy()
-        e.transpose([1, 0])
-        self.assertRaises(ValueError, iris.analysis.maths.subtract, a, e)
-
 
     def test_minus_with_data_describing_coordinate(self):
         a = self.cube
@@ -127,8 +124,10 @@ class TestBasicMaths(tests.IrisTest):
 
         xdim = a.ndim-1
         ydim = a.ndim-2
-        c_x = iris.coords.DimCoord(points=range(a.shape[xdim]), long_name='x_coord', units=self.cube.units)
-        c_y = iris.coords.AuxCoord(points=range(a.shape[ydim]), long_name='y_coord', units=self.cube.units)
+        c_x = iris.coords.DimCoord(points=np.arange(a.shape[xdim]),
+                                   long_name='x_coord', units=self.cube.units)
+        c_y = iris.coords.AuxCoord(points=np.arange(a.shape[ydim]),
+                                   long_name='y_coord', units=self.cube.units)
 
         self.assertCML(a, ('analysis', 'maths_original.cml'))
 
@@ -157,8 +156,10 @@ class TestBasicMaths(tests.IrisTest):
 
         xdim = a.ndim-1
         ydim = a.ndim-2
-        c_x = iris.coords.DimCoord(points=range(a.shape[xdim]), long_name='x_coord', units=self.cube.units)
-        c_y = iris.coords.AuxCoord(points=range(a.shape[ydim]), long_name='y_coord', units=self.cube.units)
+        c_x = iris.coords.DimCoord(points=np.arange(a.shape[xdim]),
+                                   long_name='x_coord', units=self.cube.units)
+        c_y = iris.coords.AuxCoord(points=np.arange(a.shape[ydim]),
+                                   long_name='y_coord', units=self.cube.units)
 
         self.assertCML(a, ('analysis', 'maths_original.cml'))
 
@@ -192,8 +193,12 @@ class TestBasicMaths(tests.IrisTest):
 
         xdim = a.ndim-1
         ydim = a.ndim-2
-        c_axis_length_fail = iris.coords.DimCoord(points=range(a.shape[ydim]), long_name='x_coord', units=self.cube.units)
-        c_unit_fail = iris.coords.AuxCoord(points=range(a.shape[xdim]), long_name='x_coord', units='volts')
+        c_axis_length_fail = iris.coords.DimCoord(
+            points=np.arange(a.shape[ydim]),
+            long_name='x_coord',
+            units=self.cube.units)
+        c_unit_fail = iris.coords.AuxCoord(points=np.arange(a.shape[xdim]),
+                                           long_name='x_coord', units='volts')
 
         self.assertRaises(ValueError, iris.analysis.maths.add, a, c_axis_length_fail)
         self.assertRaises(iris.exceptions.NotYetImplementedError, iris.analysis.maths.add, a, c_unit_fail)
@@ -221,12 +226,137 @@ class TestBasicMaths(tests.IrisTest):
         self.assertIsNone(c.standard_name)
         self.assertEqual(c.attributes, {})
 
+    def test_apply_ufunc(self):
+        a = self.cube
+
+        b = iris.analysis.maths.apply_ufunc(np.square, a,
+                   new_name='squared temperature', new_unit=a.units**2,
+                   in_place=False)
+        self.assertCMLApproxData(a, ('analysis', 'apply_ufunc_original.cml'))
+        self.assertCMLApproxData(b, ('analysis', 'apply_ufunc.cml'))
+
+        b = iris.analysis.maths.apply_ufunc(np.square, a,
+                   new_name='squared temperature', new_unit=a.units**2,
+                   in_place=True)
+        self.assertCMLApproxData(b, ('analysis', 'apply_ufunc.cml'))
+        self.assertCMLApproxData(a, ('analysis', 'apply_ufunc.cml'))
+
+        def vec_mag(u, v):
+            return math.sqrt(u**2 + v**2)
+
+        c = a.copy() + 2
+
+        vec_mag_ufunc = np.frompyfunc(vec_mag, 2, 1)
+        b = iris.analysis.maths.apply_ufunc(vec_mag_ufunc, a, c)
+        self.assertCMLApproxData(b, ('analysis', 'apply_ufunc_frompyfunc.cml'))
+
+    def test_apply_ufunc_fail(self):
+        a = self.cube
+
+        # should fail because 'blah' is a string, not a np.ufunc
+        self.assertRaises(TypeError, iris.analysis.maths.apply_ufunc, 'blah', a)
+
+        # should fail because math.sqrt is not a np.ufunc
+        self.assertRaises(TypeError, iris.analysis.maths.apply_ufunc, math.sqrt, a)
+
+        # should fail because np.frexp gives 2 arrays as output
+        self.assertRaises(ValueError, iris.analysis.maths.apply_ufunc, np.frexp, a)
+
+    def test_ifunc(self):
+        a = self.cube
+
+        my_ifunc = iris.analysis.maths.IFunc(np.square,
+                   lambda a: a.units**2
+                   )
+        b = my_ifunc(a, new_name='squared temperature', in_place=False)
+
+        self.assertCMLApproxData(a, ('analysis', 'apply_ifunc_original.cml'))
+        self.assertCMLApproxData(b, ('analysis', 'apply_ifunc.cml'))
+
+        b = my_ifunc(a, new_name='squared temperature', in_place=True)
+
+        self.assertCMLApproxData(b, ('analysis', 'apply_ifunc.cml'))
+        self.assertCMLApproxData(a, ('analysis', 'apply_ifunc.cml'))
+
+        def vec_mag(u, v):
+            return math.sqrt(u**2 + v**2)
+
+        c = a.copy() + 2
+
+        vec_mag_ufunc = np.frompyfunc(vec_mag, 2, 1)
+        my_ifunc = iris.analysis.maths.IFunc(vec_mag_ufunc,
+                   lambda a, b: (a + b).units)
+
+        b = my_ifunc(a, c)
+        self.assertCMLApproxData(b, ('analysis', 'apply_ifunc_frompyfunc.cml'))
+
+    def test_ifunc_init_fail(self):
+
+        # should fail because 'blah' is a string not a python function
+        self.assertRaises(TypeError, iris.analysis.maths.IFunc, 'blah',
+                          lambda cube: cf_units.Unit('1'))
+
+        # should fail because math.sqrt is built-in function, which can not be
+        # used in inspect.getargspec
+        self.assertRaises(TypeError, iris.analysis.maths.IFunc, math.sqrt,
+                          lambda cube: cf_units.Unit('1'))
+
+        # should fail because np.frexp gives 2 arrays as output
+        self.assertRaises(ValueError, iris.analysis.maths.IFunc, np.frexp,
+                          lambda cube: cf_units.Unit('1'))
+
+        # should fail because data function has 3 arguments
+        self.assertRaises(ValueError, iris.analysis.maths.IFunc,
+                   lambda a, b, c: a + b + c,
+                   lambda cube: cf_units.Unit('1')
+                   )
+
+    def test_ifunc_call_fail(self):
+        a = self.cube
+
+        my_ifunc = iris.analysis.maths.IFunc(np.square,
+                   lambda a: a.units**2
+                   )
+
+        # should fail because giving 2 arguments to an ifunc that expects
+        # only one
+        with self.assertRaises(ValueError):
+            my_ifunc(a, a)
+
+        my_ifunc = iris.analysis.maths.IFunc(np.multiply,
+                   lambda a: cf_units.Unit('1')
+                   )
+
+        # should fail because giving 1 arguments to an ifunc that expects
+        # 2
+        with self.assertRaises(ValueError):
+            my_ifunc(a)
+
+        my_ifunc = iris.analysis.maths.IFunc(
+                   lambda a: (a, a**2.0),
+                   lambda cube: cf_units.Unit('1')
+                   )
+
+        # should fail because data function returns a tuple
+        with self.assertRaises(ValueError):
+            my_ifunc(a)
+
+        my_ifunc = iris.analysis.maths.IFunc(
+                   lambda a: math.sqrt(a),
+                   lambda cube: cf_units.Unit('1')
+                   )
+
+        # should fail because data function does not work when its argument
+        # is a numpy array
+        with self.assertRaises(TypeError):
+            my_ifunc(a)
+
     def test_type_error(self):
         with self.assertRaises(TypeError):
             iris.analysis.maths.add('not a cube', 123)
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestDivideAndMultiply(tests.IrisTest):
     def setUp(self):
         self.cube = iris.tests.stock.global_pp()
@@ -298,7 +428,7 @@ class TestDivideAndMultiply(tests.IrisTest):
         # Check that the division has had no effect on the original
         self.assertCML(a, ('analysis', 'maths_original.cml'))
 
-    def test_divide_by_singluar_coordinate(self):
+    def test_divide_by_singular_coordinate(self):
         a = self.cube
 
         coord = iris.coords.DimCoord(points=2, long_name='foo', units='1')
@@ -359,17 +489,8 @@ class TestDivideAndMultiply(tests.IrisTest):
         b = iris.analysis.maths.multiply(a, 5, in_place=False)
         self.assertIsNot(a, b)
 
-    def test_type_error(self):
-        with self.assertRaises(TypeError):
-            iris.analysis.maths.multiply('not a cube', 2)
-        with self.assertRaises(TypeError):
-            iris.analysis.maths.multiply(self.cube, 'not a cube')
-        with self.assertRaises(TypeError):
-            iris.analysis.maths.multiply(self.cube, 'not a cube',
-                                         in_place=True)
 
-
-@iris.tests.skip_data
+@tests.skip_data
 class TestExponentiate(tests.IrisTest):
     def setUp(self):
         self.cube = iris.tests.stock.global_pp()
@@ -407,7 +528,89 @@ class TestExponential(tests.IrisTest):
         self.assertCMLApproxData(e, ('analysis', 'exp.cml'))
 
 
-@iris.tests.skip_data
+class TestApplyUfunc(tests.IrisTest):
+    def setUp(self):
+        self.cube = iris.tests.stock.simple_2d()
+
+    def test_apply_ufunc(self):
+        a = self.cube
+        a.units = cf_units.Unit('meters')
+
+        b = iris.analysis.maths.apply_ufunc(np.square, a,
+                new_name='more_thingness', new_unit=a.units**2, in_place=False)
+
+        ans = a.data**2
+
+        self.assertArrayEqual(b.data, ans)
+        self.assertEqual(b.name(), 'more_thingness')
+        self.assertEqual(b.units, cf_units.Unit('m^2'))
+
+        def vec_mag(u, v):
+            return math.sqrt(u**2 + v**2)
+
+        c = a.copy() + 2
+
+        vec_mag_ufunc = np.frompyfunc(vec_mag, 2, 1)
+        b = iris.analysis.maths.apply_ufunc(vec_mag_ufunc, a, c)
+
+        ans = a.data**2 + c.data**2
+        b2 = b**2
+
+        self.assertArrayAlmostEqual(b2.data, ans)
+
+
+class TestIFunc(tests.IrisTest):
+    def setUp(self):
+        self.cube = iris.tests.stock.simple_2d()
+
+    def test_ifunc(self):
+        a = self.cube
+        a.units = cf_units.Unit('meters')
+
+        my_ifunc = iris.analysis.maths.IFunc(np.square,
+                lambda x: x.units**2)
+        b = my_ifunc(a, new_name='more_thingness', in_place=False)
+
+        ans = a.data**2
+
+        self.assertArrayEqual(b.data, ans)
+        self.assertEqual(b.name(), 'more_thingness')
+        self.assertEqual(b.units, cf_units.Unit('m^2'))
+
+        def vec_mag(u, v):
+            return math.sqrt(u**2 + v**2)
+
+        c = a.copy() + 2
+
+        vec_mag_ufunc = np.frompyfunc(vec_mag, 2, 1)
+        my_ifunc = iris.analysis.maths.IFunc(vec_mag_ufunc, 
+                   lambda x,y: (x + y).units)
+        b = my_ifunc(a, c)
+
+        ans = ( a.data**2 + c.data**2 ) ** 0.5
+
+        self.assertArrayAlmostEqual(b.data, ans)
+
+        def vec_mag_data_func(u_data, v_data):
+            return np.sqrt( u_data**2 + v_data**2 )
+
+        vec_mag_ifunc = iris.analysis.maths.IFunc(vec_mag_data_func, lambda a,b: (a + b).units)
+        b2 = vec_mag_ifunc(a, c)
+
+        self.assertArrayAlmostEqual(b.data, b2.data)
+
+        cs_ifunc = iris.analysis.maths.IFunc(np.cumsum,
+                   lambda a: a.units
+                   )
+
+        b = cs_ifunc(a, axis=1)
+        ans = a.data.copy()
+        ans = np.cumsum(ans, axis=1) 
+
+        self.assertArrayAlmostEqual(b.data, ans)
+
+
+@tests.skip_data
 class TestLog(tests.IrisTest):
     def setUp(self):
         self.cube = iris.tests.stock.global_pp()
@@ -422,59 +625,192 @@ class TestLog(tests.IrisTest):
 
     def test_log10(self):
         e = iris.analysis.maths.log10(self.cube)
-        self.assertCMLApproxData(e, ('analysis', 'log10.cml'))
+        self.assertCMLApproxData(e, ('analysis', 'log10.cml'), rtol=1e-6)
 
 
-class TestMaskedArrays(tests.IrisTest):
-    ops = (operator.add, operator.sub, operator.mul, operator.div)
-    iops = (operator.iadd, operator.isub, operator.imul, operator.idiv)
-
+class TestMathOperations(tests.IrisTest):
     def setUp(self):
-        self.data1 = ma.MaskedArray([[9,9,9],[8,8,8,]],mask=[[0,1,0],[0,0,1]])
-        self.data2 = ma.MaskedArray([[3,3,3],[2,2,2,]],mask=[[0,1,0],[0,1,1]])
+        self.data_1f = np.array([[9, 9, 9], [8, 8, 8]],
+                                dtype=np.float64)
+        self.data_2f = np.array([[3, 3, 3], [2, 2, 2]],
+                                dtype=np.float64)
+        self.data_1i = np.array([[9, 9, 9], [8, 8, 8]],
+                                dtype=np.int64)
+        self.data_2i = np.array([[3, 3, 3], [2, 2, 2]],
+                                dtype=np.int64)
+        self.data_1u = np.array([[9, 9, 9], [8, 8, 8]],
+                                dtype=np.uint64)
+        self.data_2u = np.array([[3, 3, 3], [2, 2, 2]],
+                                dtype=np.uint64)
 
-        self.cube1 = iris.cube.Cube(self.data1)
-        self.cube2 = iris.cube.Cube(self.data2)
+        self.cube_1f = iris.cube.Cube(self.data_1f)
+        self.cube_2f = iris.cube.Cube(self.data_2f)
+        self.cube_1i = iris.cube.Cube(self.data_1i)
+        self.cube_2i = iris.cube.Cube(self.data_2i)
+        self.cube_1u = iris.cube.Cube(self.data_1u)
+        self.cube_2u = iris.cube.Cube(self.data_2u)
+
+        self.ops = (operator.add, operator.sub, operator.mul, operator.truediv)
+        self.iops = (operator.iadd, operator.isub,
+                     operator.imul, operator.itruediv)
 
     def test_operator(self):
         for test_op in self.ops:
-            result1 = test_op(self.cube1, self.cube2)
-            result2 = test_op(self.data1, self.data2)
+            result1 = test_op(self.cube_1f, self.cube_2f)
+            result2 = test_op(self.data_1f, self.data_2f)
+            self.assertArrayAlmostEqual(result1.data, result2)
+            result3 = test_op(self.cube_1i, self.cube_2i)
+            result4 = test_op(self.data_1i, self.data_2i)
+            self.assertArrayAlmostEqual(result3.data, result4)
+            result3 = test_op(self.cube_1u, self.cube_2u)
+            result4 = test_op(self.data_1u, self.data_2u)
+            self.assertArrayAlmostEqual(result3.data, result4)
 
-            np.testing.assert_array_equal(result1.data, result2)
-
-    def test_operator_in_place(self):
-        for test_op in self.iops:
-            test_op(self.cube1, self.cube2)
-            test_op(self.data1, self.data2)
-
-            np.testing.assert_array_equal(self.cube1.data, self.data1)
-
-    def test_operator_scalar(self):
+    def test_operator__mixed_floats_ints(self):
         for test_op in self.ops:
-            result1 = test_op(self.cube1, 2)
-            result2 = test_op(self.data1, 2)
+            result1 = test_op(self.cube_1f, self.cube_2i)
+            result2 = test_op(self.data_1f, self.data_2i)
+            self.assertArrayAlmostEqual(result1.data, result2)
+            result3 = test_op(self.cube_1i, self.cube_2f)
+            result4 = test_op(self.data_1i, self.data_2f)
+            self.assertArrayAlmostEqual(result3.data, result4)
 
-            np.testing.assert_array_equal(result1.data, result2)
+    def test_operator__inplace(self):
+        for test_op in self.iops:
+            test_op(self.cube_1f, self.cube_2f)
+            test_op(self.data_1f, self.data_2f)
+            self.assertArrayAlmostEqual(self.cube_1f.data, self.data_1f)
+            if test_op != operator.itruediv:
+                # You can't safely cast floats from true-dividing back to ints
+                # to satisfy the in-place requirement.
+                test_op(self.cube_1i, self.cube_2i)
+                expected = test_op(self.data_1i, self.data_2i)
+                self.assertArrayAlmostEqual(self.cube_1i.data, expected)
+                test_op(self.cube_1u, self.cube_2u)
+                expected = test_op(self.data_1u, self.data_2u)
+                self.assertArrayAlmostEqual(self.cube_1u.data, expected)
+
+    def test_operator__inplace__mixed_floats_ints_uints(self):
+        # Can only test float-type numerators as int-type numerators
+        # would require casting ints to floats to satisfy the in-place
+        # requirement, which cannot be done 'safely'.
+        for test_op in self.iops:
+            result1 = test_op(self.cube_1f, self.cube_2i)
+            result2 = test_op(self.data_1f, self.data_2i)
+            self.assertArrayAlmostEqual(result1.data, result2)
+            result1 = test_op(self.cube_1f, self.cube_2u)
+            result2 = test_op(self.data_1f, self.data_2u)
+            self.assertArrayAlmostEqual(result1.data, result2)
+
+    def test_operator__inplace__mixed_ints_uints_floats(self):
+        # Math operations on int-type numerators float-type denominators
+        # would require casting floats to ints to satisfy the in-place
+        # requirement.
+        for test_op in self.iops:
+            test_emsg = 'Cannot perform inplace'
+            with self.assertRaisesRegexp(ArithmeticError, test_emsg):
+                test_op(self.cube_1i, self.cube_2f)
+            with self.assertRaisesRegexp(ArithmeticError, test_emsg):
+                test_op(self.cube_1u, self.cube_2f)
+
+    def test_operator__inplace__scalar_int(self):
+        # Math operations on int-type numerators float-type denominators
+        # would require casting floats to ints to satisfy the in-place
+        # requirement.
+        scalar = 2
+        for test_op in self.iops:
+            if test_op != operator.itruediv:
+                # You can't safely cast floats from true-dividing back to ints
+                # to satisfy the in-place requirement.
+                test_op(self.cube_1i, scalar)
+                test_op(self.data_1i, scalar)
+                self.assertArrayAlmostEqual(self.cube_1i.data, self.data_1i)
+                test_op(self.cube_1u, scalar)
+                test_op(self.data_1u, scalar)
+                self.assertArrayAlmostEqual(self.cube_1u.data, self.data_1u)
+
+    def test_operator__inplace__scalar_float(self):
+        # Math operations on int-type numerators float-type denominators
+        # would require casting floats to ints to satisfy the in-place
+        # requirement.
+        scalar = 2.5
+        for test_op in self.iops:
+            test_emsg = 'Cannot perform inplace'
+            with self.assertRaisesRegexp(ArithmeticError, test_emsg):
+                test_op(self.cube_1i, scalar)
+            with self.assertRaisesRegexp(ArithmeticError, test_emsg):
+                test_op(self.cube_1u, scalar)
+
+    def test_operator__scalar_float(self):
+        scalar = 2.5
+        for test_op in self.ops:
+            result1 = test_op(self.cube_1f, scalar)
+            result2 = test_op(self.data_1f, scalar)
+            self.assertArrayAlmostEqual(result1.data, result2)
+            result3 = test_op(self.cube_1i, scalar)
+            result4 = test_op(self.data_1i, scalar)
+            self.assertArrayAlmostEqual(result3.data, result4)
+
+    def test_operator_scalar__int(self):
+        scalar = 2
+        for test_op in self.ops:
+            result1 = test_op(self.cube_1f, scalar)
+            result2 = test_op(self.data_1f, scalar)
+            self.assertArrayAlmostEqual(result1.data, result2)
+            result3 = test_op(self.cube_1i, scalar)
+            result4 = test_op(self.data_1i, scalar)
+            self.assertArrayAlmostEqual(result3.data, result4)
 
     def test_operator_array(self):
         for test_op in self.ops:
-            result1 = test_op(self.cube1, self.data2)
-            result2 = test_op(self.data1, self.data2)
+            result1 = test_op(self.cube_1f, self.data_2f)
+            result2 = test_op(self.data_1f, self.data_2f)
+            self.assertArrayAlmostEqual(result1.data, result2)
+            result3 = test_op(self.cube_1i, self.data_2i)
+            result4 = test_op(self.data_1i, self.data_2i)
+            self.assertArrayAlmostEqual(result3.data, result4)
 
-            np.testing.assert_array_equal(result1.data, result2)
+    def test_cube_itruediv__int(self):
+        with self.assertRaisesRegexp(ArithmeticError,
+                                     'Cannot perform inplace division'):
+            operator.itruediv(self.cube_1i, self.cube_2i)
+
+    def test_cube_itruediv__uint(self):
+        with self.assertRaisesRegexp(ArithmeticError,
+                                     'Cannot perform inplace division'):
+            operator.itruediv(self.cube_1u, self.cube_2u)
+
+    def test_int_cube_itruediv__scalar(self):
+        with self.assertRaisesRegexp(ArithmeticError,
+                                     'Cannot perform inplace division'):
+            operator.itruediv(self.cube_1i, 5)
+
+    def test_uint_cube_itruediv__scalar(self):
+        with self.assertRaisesRegexp(ArithmeticError,
+                                     'Cannot perform inplace division'):
+            operator.itruediv(self.cube_1u, 5)
+
+
+class TestMaskedArrays(tests.IrisTest):
+    def setUp(self):
+        self.data = ma.MaskedArray([[9, 9, 9], [8, 8, 8]],
+                                   mask=[[0, 1, 0], [0, 0, 1]],
+                                   dtype=np.float64)
+        self.cube = iris.cube.Cube(self.data)
 
     def test_incompatible_dimensions(self):
-        data3 = ma.MaskedArray([[3,3,3,4],[2,2,2]],mask=[[0,1,0,0],[0,1,1]])
+        data3 = ma.MaskedArray([[3, 3, 3, 4], [2, 2, 2]],
+                               mask=[[0, 1, 0, 0], [0, 1, 1]])
         with self.assertRaises(ValueError):
-            # incompatible dimensions
-            self.cube1 + data3
+            # Incompatible dimensions.
+            self.cube + data3
 
     def test_increase_cube_dimensionality(self):
         with self.assertRaises(ValueError):
-            # This would increase the dimensionality of the cube due to auto broadcasting
-            cubex = iris.cube.Cube(ma.MaskedArray([[9,]],mask=[[0]]))
-            cubex + ma.MaskedArray([[3,3,3,3]],mask=[[0,1,0,1]])
+            # This would increase the dimensionality of the cube
+            # due to auto-broadcasting.
+            cube_x = iris.cube.Cube(ma.MaskedArray([[9]], mask=[[0]]))
+            cube_x + ma.MaskedArray([[3, 3, 3, 3]], mask=[[0, 1, 0, 1]])
 
 
 if __name__ == "__main__":

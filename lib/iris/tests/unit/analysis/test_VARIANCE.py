@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013, Met Office
+# (C) British Crown Copyright 2013 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,13 +16,22 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 """Unit tests for the :data:`iris.analysis.VARIANCE` aggregator."""
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
-import mock
+import numpy as np
+import numpy.ma as ma
 
+from iris._lazy_data import as_lazy_data, as_concrete_data
 from iris.analysis import VARIANCE
+import iris.cube
+from iris.coords import DimCoord
+
+from iris.tests import mock
 
 
 class Test_units_func(tests.IrisTest):
@@ -34,6 +43,57 @@ class Test_units_func(tests.IrisTest):
         # Make sure the VARIANCE units_func tries to square the units.
         mul.assert_called_once_with(units)
         self.assertEqual(new_units, mock.sentinel.new_unit)
+
+
+class Test_masked(tests.IrisTest):
+    def setUp(self):
+        self.cube = iris.cube.Cube(ma.masked_equal([1, 2, 3, 4, 5], 3))
+        self.cube.add_dim_coord(DimCoord([6, 7, 8, 9, 10],
+                                         long_name='foo'), 0)
+
+    def test_ma_ddof0(self):
+        cube = self.cube.collapsed("foo", VARIANCE, ddof=0)
+        expected = 10 / 4.
+        self.assertArrayEqual(np.var(self.cube.data, ddof=0), expected)
+        self.assertArrayAlmostEqual(cube.data, expected)
+
+    def test_ma_ddof1(self):
+        cube = self.cube.collapsed("foo", VARIANCE, ddof=1)
+        expected = 10 / 3.
+        self.assertArrayEqual(np.var(self.cube.data, ddof=1), expected)
+        self.assertArrayEqual(cube.data, expected)
+
+        # test that the default ddof is 1
+        default_cube = self.cube.collapsed("foo", VARIANCE)
+        self.assertArrayEqual(cube.data, default_cube.data)
+
+
+class Test_lazy_aggregate(tests.IrisTest):
+    def test_ddof_one(self):
+        array = as_lazy_data(np.arange(8))
+        var = VARIANCE.lazy_aggregate(array, axis=0, ddof=1)
+        result = as_concrete_data(var)
+        self.assertArrayAlmostEqual(result, np.array(6.0))
+
+    def test_ddof_zero(self):
+        array = as_lazy_data(np.arange(8))
+        var = VARIANCE.lazy_aggregate(array, axis=0, ddof=0)
+        result = as_concrete_data(var)
+        self.assertArrayAlmostEqual(result, np.array(5.25))
+
+
+class Test_name(tests.IrisTest):
+    def test(self):
+        self.assertEqual(VARIANCE.name(), 'variance')
+
+
+class Test_aggregate_shape(tests.IrisTest):
+    def test(self):
+        shape = ()
+        kwargs = dict()
+        self.assertTupleEqual(VARIANCE.aggregate_shape(**kwargs), shape)
+        kwargs = dict(bat='man', wonder='woman')
+        self.assertTupleEqual(VARIANCE.aggregate_shape(**kwargs), shape)
 
 
 if __name__ == "__main__":

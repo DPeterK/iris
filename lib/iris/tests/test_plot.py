@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -15,6 +15,9 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
 
 # import iris tests first so that some things can be initialised before
 # importing anything else
@@ -24,18 +27,22 @@ from functools import wraps
 import types
 import warnings
 
-import matplotlib.pyplot as plt
+import cf_units
 import numpy as np
 
 import iris
 import iris.coords as coords
-import iris.plot as iplt
-import iris.quickplot as qplt
-import iris.symbols
 import iris.tests.stock
-import iris.tests.test_mapping as test_mapping
+
+# Run tests in no graphics mode if matplotlib is not available.
+if tests.MPL_AVAILABLE:
+    import matplotlib.pyplot as plt
+    import iris.plot as iplt
+    import iris.quickplot as qplt
+    import iris.symbols
 
 
+@tests.skip_data
 def simple_cube():
     cube = iris.tests.stock.realistic_4d()
     cube = cube[:, 0, 0, :]
@@ -43,6 +50,7 @@ def simple_cube():
     return cube
 
 
+@tests.skip_plot
 class TestSimple(tests.GraphicsTest):
     def test_points(self):
         cube = simple_cube()
@@ -55,6 +63,7 @@ class TestSimple(tests.GraphicsTest):
         self.check_graphic()
 
 
+@tests.skip_plot
 class TestMissingCoord(tests.GraphicsTest):
     def _check(self, cube):
         qplt.contourf(cube)
@@ -80,9 +89,10 @@ class TestMissingCoord(tests.GraphicsTest):
         self._check(cube)
 
 
-@iris.tests.skip_data
+@tests.skip_data
+@tests.skip_plot
 class TestMissingCS(tests.GraphicsTest):
-    @iris.tests.skip_data
+    @tests.skip_data
     def test_missing_cs(self):
         cube = tests.stock.simple_pp()
         cube.coord("latitude").coord_system = None
@@ -92,8 +102,11 @@ class TestMissingCS(tests.GraphicsTest):
         self.check_graphic()
 
 
+@tests.skip_plot
+@tests.skip_data
 class TestHybridHeight(tests.GraphicsTest):
     def setUp(self):
+        super(TestHybridHeight, self).setUp()
         self.cube = iris.tests.stock.realistic_4d()[0, :15, 0, :]
 
     def _check(self, plt_method, test_altitude=True):
@@ -139,10 +152,13 @@ class TestHybridHeight(tests.GraphicsTest):
             self.check_graphic()
 
 
+@tests.skip_plot
+@tests.skip_data
 class Test1dPlotMultiArgs(tests.GraphicsTest):
     # tests for iris.plot using multi-argument calling convention
 
     def setUp(self):
+        super(Test1dPlotMultiArgs, self).setUp()
         self.cube1d = _load_4d_testcube()[0, :, 0, 0]
         self.draw_method = iplt.plot
 
@@ -190,8 +206,8 @@ class Test1dPlotMultiArgs(tests.GraphicsTest):
         cube2 = self.cube1d.copy()
         cube1.rename('some phenomenon')
         cube2.rename('some other phenomenon')
-        cube1.units = iris.unit.Unit('no_unit')
-        cube2.units = iris.unit.Unit('no_unit')
+        cube1.units = cf_units.Unit('no_unit')
+        cube2.units = cf_units.Unit('no_unit')
         cube1.data[:] = np.linspace(0, 1, 7)
         cube2.data[:] = np.exp(cube1.data)
         self.draw_method(cube1, cube2)
@@ -215,40 +231,29 @@ class Test1dPlotMultiArgs(tests.GraphicsTest):
         with self.assertRaises(TypeError):
             self.draw_method(xdim, self.cube1d)
 
-    def test_coords_deprecated(self):
-        # ensure a warning is raised if the old coords keyword argument is
-        # used, and make sure the plot produced is consistent with the old
-        # interface
-        msg = 'Missing deprecation warning for coords keyword.'
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always')
-            self.draw_method(self.cube1d, coords=['sigma'])
-            self.assertEqual(len(w), 1, msg)
-        self.check_graphic()
-
-    def test_coords_deprecation_too_many(self):
-        # in deprecation mode, too many coords is an error
-        with self.assertRaises(ValueError):
-            self.draw_method(self.cube1d, coords=['sigma', 'sigma'])
-
-    def test_coords_deprecation_invalid_span(self):
-        # in deprecation mode, a coordinate that doesn't span data is an error
-        with self.assertRaises(ValueError):
-            self.draw_method(self.cube1d, coords=['time'])
+    def test_plot_old_coords_kwarg(self):
+        # Coords used to be a valid kwarg to plot, but it was deprecated and
+        # we are maintaining a reasonable exception, check that it is raised
+        # here.
+        with self.assertRaises(TypeError):
+            self.draw_method(self.cube1d, coords=None)
 
 
+@tests.skip_plot
 class Test1dQuickplotPlotMultiArgs(Test1dPlotMultiArgs):
     # tests for iris.plot using multi-argument calling convention
 
     def setUp(self):
+        tests.GraphicsTest.setUp(self)
         self.cube1d = _load_4d_testcube()[0, :, 0, 0]
         self.draw_method = qplt.plot
 
 
 @tests.skip_data
+@tests.skip_plot
 class Test1dScatter(tests.GraphicsTest):
-
     def setUp(self):
+        super(Test1dScatter, self).setUp()
         self.cube = iris.load_cube(
             tests.get_data_path(('NAME', 'NAMEIII_trajectory.txt')),
             'Temperature')
@@ -256,7 +261,7 @@ class Test1dScatter(tests.GraphicsTest):
 
     def test_coord_coord(self):
         x = self.cube.coord('longitude')
-        y = self.cube.coord('height')
+        y = self.cube.coord('altitude')
         c = self.cube.data
         self.draw_method(x, y, c=c, edgecolor='none')
         self.check_graphic()
@@ -278,7 +283,7 @@ class Test1dScatter(tests.GraphicsTest):
 
     def test_cube_coord(self):
         x = self.cube
-        y = self.cube.coord('height')
+        y = self.cube.coord('altitude')
         c = self.cube.coord('Travel Time').points
         self.draw_method(x, y, c=c, edgecolor='none')
         self.check_graphic()
@@ -295,7 +300,7 @@ class Test1dScatter(tests.GraphicsTest):
     def test_incompatible_objects(self):
         # cubes/coordinates of different sizes cannot be plotted
         x = self.cube
-        y = self.cube.coord('height')[:-1]
+        y = self.cube.coord('altitude')[:-1]
         with self.assertRaises(ValueError):
             self.draw_method(x, y)
 
@@ -315,16 +320,18 @@ class Test1dScatter(tests.GraphicsTest):
 
 
 @tests.skip_data
+@tests.skip_plot
 class Test1dQuickplotScatter(Test1dScatter):
-
     def setUp(self):
+        tests.GraphicsTest.setUp(self)
         self.cube = iris.load_cube(
             tests.get_data_path(('NAME', 'NAMEIII_trajectory.txt')),
             'Temperature')
         self.draw_method = qplt.scatter
 
 
-@iris.tests.skip_data
+@tests.skip_data
+@tests.skip_plot
 class TestAttributePositive(tests.GraphicsTest):
     def test_1d_positive_up(self):
         path = tests.get_data_path(('NetCDF', 'ORCA2', 'votemper.nc'))
@@ -341,7 +348,7 @@ class TestAttributePositive(tests.GraphicsTest):
     def test_2d_positive_up(self):
         path = tests.get_data_path(('NetCDF', 'testing',
                                     'small_theta_colpex.nc'))
-        cube = iris.load_cube(path)[0, :, 42, :]
+        cube = iris.load_cube(path, 'air_potential_temperature')[0, :, 42, :]
         qplt.pcolormesh(cube)
         self.check_graphic()
 
@@ -363,6 +370,7 @@ def cache(fn, cache={}):
 
 
 @cache
+@tests.skip_data
 def _load_4d_testcube():
     # Load example 4d data (TZYX).
     test_cube = iris.tests.stock.realistic_4d()
@@ -381,7 +389,7 @@ def _load_4d_testcube():
         points=point_values,
         bounds=bound_values,
         standard_name='forecast_period',
-        units=iris.unit.Unit('hours')
+        units=cf_units.Unit('hours')
     )
     test_cube.add_aux_coord(new_forecast_coord, forecast_dims)
     # Heavily reduce dimensions for faster testing.
@@ -421,6 +429,7 @@ def _date_series(src_cube):
     return cube
 
 
+@tests.skip_plot
 class SliceMixin(object):
     """Mixin class providing tests for each 2-dimensional permutation of axes.
 
@@ -458,34 +467,38 @@ class SliceMixin(object):
         self.check_graphic()
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestContour(tests.GraphicsTest, SliceMixin):
     """Test the iris.plot.contour routine."""
     def setUp(self):
+        super(TestContour, self).setUp()
         self.wind = _load_4d_testcube()
         self.draw_method = iplt.contour
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestContourf(tests.GraphicsTest, SliceMixin):
     """Test the iris.plot.contourf routine."""
     def setUp(self):
+        super(TestContourf, self).setUp()
         self.wind = _load_4d_testcube()
         self.draw_method = iplt.contourf
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestPcolor(tests.GraphicsTest, SliceMixin):
     """Test the iris.plot.pcolor routine."""
     def setUp(self):
+        super(TestPcolor, self).setUp()
         self.wind = _load_4d_testcube()
         self.draw_method = iplt.pcolor
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestPcolormesh(tests.GraphicsTest, SliceMixin):
     """Test the iris.plot.pcolormesh routine."""
     def setUp(self):
+        super(TestPcolormesh, self).setUp()
         self.wind = _load_4d_testcube()
         self.draw_method = iplt.pcolormesh
 
@@ -567,34 +580,39 @@ class CheckForWarningsMetaclass(type):
         return type.__new__(cls, name, bases, local)
 
 
-@iris.tests.skip_data
-class TestPcolorNoBounds(tests.GraphicsTest, SliceMixin):
+@tests.skip_data
+@tests.iristest_timing_decorator
+class TestPcolorNoBounds(six.with_metaclass(CheckForWarningsMetaclass,
+                                            tests.GraphicsTest_nometa,
+                                            SliceMixin)):
     """
     Test the iris.plot.pcolor routine on a cube with coordinates
     that have no bounds.
 
     """
-    __metaclass__ = CheckForWarningsMetaclass
-
     def setUp(self):
+        super(TestPcolorNoBounds, self).setUp()
         self.wind = _load_wind_no_bounds()
         self.draw_method = iplt.pcolor
 
 
-@iris.tests.skip_data
-class TestPcolormeshNoBounds(tests.GraphicsTest, SliceMixin):
+@tests.skip_data
+@tests.iristest_timing_decorator
+class TestPcolormeshNoBounds(six.with_metaclass(CheckForWarningsMetaclass,
+                                                tests.GraphicsTest_nometa,
+                                                SliceMixin)):
     """
     Test the iris.plot.pcolormesh routine on a cube with coordinates
     that have no bounds.
 
     """
-    __metaclass__ = CheckForWarningsMetaclass
-
     def setUp(self):
+        super(TestPcolormeshNoBounds, self).setUp()
         self.wind = _load_wind_no_bounds()
         self.draw_method = iplt.pcolormesh
 
 
+@tests.skip_plot
 class Slice1dMixin(object):
     """Mixin class providing tests for each 1-dimensional permutation of axes.
 
@@ -630,18 +648,20 @@ class Slice1dMixin(object):
         self.check_graphic()
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestPlot(tests.GraphicsTest, Slice1dMixin):
     """Test the iris.plot.plot routine."""
     def setUp(self):
+        super(TestPlot, self).setUp()
         self.wind = _load_4d_testcube()
         self.draw_method = iplt.plot
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestQuickplotPlot(tests.GraphicsTest, Slice1dMixin):
     """Test the iris.quickplot.plot routine."""
     def setUp(self):
+        super(TestQuickplotPlot, self).setUp()
         self.wind = _load_4d_testcube()
         self.draw_method = qplt.plot
 
@@ -679,9 +699,11 @@ class LambdaStr(object):
         return self.repr
 
 
-@iris.tests.skip_data
+@tests.skip_data
+@tests.skip_plot
 class TestPlotCoordinatesGiven(tests.GraphicsTest):
     def setUp(self):
+        super(TestPlotCoordinatesGiven, self).setUp()
         filename = tests.get_data_path(('PP', 'COLPEX',
                                         'theta_and_orog_subset.pp'))
         self.cube = load_cube_once(filename, 'air_potential_temperature')
@@ -745,7 +767,7 @@ class TestPlotCoordinatesGiven(tests.GraphicsTest):
             draw_method(cube, coords=coords)
             try:
                 self.check_graphic()
-            except AssertionError, err:
+            except AssertionError as err:
                 self.fail('Draw method %r failed with coords: %r. '
                           'Assertion message: %s' % (draw_method, coords, err))
 
@@ -807,9 +829,11 @@ class TestPlotCoordinatesGiven(tests.GraphicsTest):
         self.draw('contourf', cube, coords=['grid_latitude', x])
 
 
-@iris.tests.skip_data
+@tests.skip_data
+@tests.skip_plot
 class TestPlotDimAndAuxCoordsKwarg(tests.GraphicsTest):
     def setUp(self):
+        super(TestPlotDimAndAuxCoordsKwarg, self).setUp()
         filename = tests.get_data_path(('NetCDF', 'rotated', 'xy',
                                         'rotPole_landAreaFraction.nc'))
         self.cube = iris.load_cube(filename)
@@ -851,14 +875,18 @@ class TestPlotDimAndAuxCoordsKwarg(tests.GraphicsTest):
         self.check_graphic()
 
 
+@tests.skip_plot
 class TestSymbols(tests.GraphicsTest):
     def test_cloud_cover(self):
-        iplt.symbols(range(10), [0] * 10, [iris.symbols.CLOUD_COVER[i]
-                                           for i in range(10)], 0.375)
+        iplt.symbols(list(range(10)),
+                     [0] * 10,
+                     [iris.symbols.CLOUD_COVER[i] for i in range(10)],
+                     0.375)
         iplt.plt.axis('off')
         self.check_graphic()
 
 
+@tests.skip_plot
 class TestPlottingExceptions(tests.IrisTest):
     def setUp(self):
         self.bounded_cube = tests.stock.lat_lon_cube()
@@ -898,7 +926,8 @@ class TestPlottingExceptions(tests.IrisTest):
             iplt.pcolormesh(cube, coords=['longitude', 'latitude'])
 
 
-@iris.tests.skip_data
+@tests.skip_data
+@tests.skip_plot
 class TestPlotOtherCoordSystems(tests.GraphicsTest):
     def test_plot_tmerc(self):
         filename = tests.get_data_path(('NetCDF', 'transverse_mercator',
@@ -906,6 +935,29 @@ class TestPlotOtherCoordSystems(tests.GraphicsTest):
         self.cube = iris.load_cube(filename)
         iplt.pcolormesh(self.cube[0])
         plt.gca().coastlines()
+        self.check_graphic()
+
+
+@tests.skip_plot
+class TestPlotCitation(tests.GraphicsTest):
+    def setUp(self):
+        super(TestPlotCitation, self).setUp()
+        self.figure = plt.figure()
+        self.axes = self.figure.gca()
+        self.text = ('Lorem ipsum dolor sit amet, consectetur adipiscing '
+                     'elit, sed do eiusmod tempor incididunt ut labore et '
+                     'dolore magna aliqua.')
+
+    def test(self):
+        iplt.citation(self.text)
+        self.check_graphic()
+
+    def test_figure(self):
+        iplt.citation(self.text, figure=self.figure)
+        self.check_graphic()
+
+    def test_axes(self):
+        iplt.citation(self.text, axes=self.axes)
         self.check_graphic()
 
 

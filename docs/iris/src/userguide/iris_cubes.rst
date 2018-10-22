@@ -4,6 +4,7 @@
 Introduction
 ===================
 
+.. _iris_data_structures:
 
 Iris data structures
 --------------------
@@ -145,14 +146,16 @@ Printing a cube
 Every Iris cube can be printed to screen as you will see later in the user guide. It is worth familiarising yourself with the
 output as this is the quickest way of inspecting the contents of a cube. Here is the result of printing a real life cube:
 
+.. _hybrid_cube_printout:
+
 .. testcode::
      :hide:
 
      import iris
      filename = iris.sample_data_path('uk_hires.pp')
      # NOTE: Every time the output of this cube changes, the full list of deductions below should be re-assessed. 
-     print iris.load_cube(filename, 'air_potential_temperature')
-     
+     print(iris.load_cube(filename, 'air_potential_temperature'))
+
 .. testoutput::
 
     air_potential_temperature / (K)     (time: 3; model_level_number: 7; grid_latitude: 204; grid_longitude: 187)
@@ -172,7 +175,8 @@ output as this is the quickest way of inspecting the contents of a cube. Here is
               forecast_reference_time: 2009-11-19 04:00:00
          Attributes:
               STASH: m01s00i004
-              source: Data from Met Office Unified Model 7.03
+              source: Data from Met Office Unified Model
+              um_version: 7.3
 
 
 Using this output we can deduce that:

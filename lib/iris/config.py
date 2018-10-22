@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -23,13 +23,6 @@ defined by :mod:`ConfigParser`.
 
 ----------
 
-.. py:data:: iris.config.SAMPLE_DATA_DIR
-
-    Local directory where sample data exists. Defaults to "sample_data"
-    sub-directory of the Iris package install directory. The sample data
-    directory supports the Iris gallery. Directory contents accessed via
-    :func:`iris.sample_data_path`.
-
 .. py:data:: iris.config.TEST_DATA_DIR
 
     Local directory where test data exists.  Defaults to "test_data"
@@ -41,16 +34,6 @@ defined by :mod:`ConfigParser`.
 
     The full path to the Iris palette configuration directory
 
-.. py:data:: iris.config.RULE_LOG_DIR
-
-    The [optional] full path to the rule logging directory used by
-    :func:`iris.fileformats.pp.load()` and
-    :func:`iris.fileformats.pp.save()`.
-
-.. py:data:: iris.config.RULE_LOG_IGNORE
-
-    The [optional] list of users to ignore when logging rules.
-
 .. py:data:: iris.config.IMPORT_LOGGER
 
     The [optional] name of the logger to notify when first imported.
@@ -58,8 +41,14 @@ defined by :mod:`ConfigParser`.
 ----------
 """
 
-import ConfigParser
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
+from six.moves import configparser
+
+import contextlib
 import os.path
+import sys
 import warnings
 
 
@@ -103,7 +92,10 @@ ROOT_PATH = os.path.abspath(os.path.dirname(__file__))
 CONFIG_PATH = os.path.join(ROOT_PATH, 'etc')
 
 # Load the optional "site.cfg" file if it exists.
-config = ConfigParser.SafeConfigParser()
+if sys.version_info >= (3, 2):
+    config = configparser.ConfigParser()
+else:
+    config = configparser.SafeConfigParser()
 config.read([os.path.join(CONFIG_PATH, 'site.cfg')])
 
 
@@ -112,10 +104,6 @@ config.read([os.path.join(CONFIG_PATH, 'site.cfg')])
 _RESOURCE_SECTION = 'Resources'
 
 
-SAMPLE_DATA_DIR = get_dir_option(
-    _RESOURCE_SECTION, 'sample_data_dir',
-    default=os.path.join(os.path.dirname(__file__), 'sample_data'))
-
 TEST_DATA_DIR = get_dir_option(_RESOURCE_SECTION, 'test_data_dir',
                                default=os.path.join(os.path.dirname(__file__),
                                                     'test_data'))
@@ -123,22 +111,113 @@ TEST_DATA_DIR = get_dir_option(_RESOURCE_SECTION, 'test_data_dir',
 # Override the data repository if the appropriate environment variable
 # has been set.  This is used in setup.py in the TestRunner command to
 # enable us to simulate the absence of external data.
-if os.environ.get("override_test_data_repository"):
+override = os.environ.get("OVERRIDE_TEST_DATA_REPOSITORY")
+if override:
     TEST_DATA_DIR = None
+    if os.path.isdir(os.path.expanduser(override)):
+        TEST_DATA_DIR = os.path.abspath(override)
 
 PALETTE_PATH = get_dir_option(_RESOURCE_SECTION, 'palette_path',
                               os.path.join(CONFIG_PATH, 'palette'))
 
-
-#################
-# Logging options
-_LOGGING_SECTION = 'Logging'
+# Runtime options
 
 
-RULE_LOG_DIR = get_dir_option(_LOGGING_SECTION, 'rule_dir')
+class NetCDF(object):
+    """Control Iris NetCDF options."""
+
+    def __init__(self, conventions_override=None):
+        """
+        Set up NetCDF processing options for Iris.
+
+        Currently accepted kwargs:
+
+        * conventions_override (bool):
+            Define whether the CF Conventions version (e.g. `CF-1.6`) set when
+            saving a cube to a NetCDF file should be defined by
+            Iris (the default) or the cube being saved.
+
+            If `False` (the default), specifies that Iris should set the
+            CF Conventions version when saving cubes as NetCDF files.
+            If `True`, specifies that the cubes being saved to NetCDF should
+            set the CF Conventions version for the saved NetCDF files.
+
+        Example usages:
+
+        * Specify, for the lifetime of the session, that we want all cubes
+          written to NetCDF to define their own CF Conventions versions::
+
+            iris.config.netcdf.conventions_override = True
+            iris.save('my_cube', 'my_dataset.nc')
+            iris.save('my_second_cube', 'my_second_dataset.nc')
+
+        * Specify, with a context manager, that we want a cube written to
+          NetCDF to define its own CF Conventions version::
+
+            with iris.config.netcdf.context(conventions_override=True):
+                iris.save('my_cube', 'my_dataset.nc')
+
+        """
+        # Define allowed `__dict__` keys first.
+        self.__dict__['conventions_override'] = None
+
+        # Now set specific values.
+        setattr(self, 'conventions_override', conventions_override)
+
+    def __repr__(self):
+        msg = 'NetCDF options: {}.'
+        # Automatically populate with all currently accepted kwargs.
+        options = ['{}={}'.format(k, v)
+                   for k, v in six.iteritems(self.__dict__)]
+        joined = ', '.join(options)
+        return msg.format(joined)
+
+    def __setattr__(self, name, value):
+        if name not in self.__dict__:
+            # Can't add new names.
+            msg = 'Cannot set option {!r} for {} configuration.'
+            raise AttributeError(msg.format(name, self.__class__.__name__))
+        if value is None:
+            # Set an unset value to the name's default.
+            value = self._defaults_dict[name]['default']
+        if self._defaults_dict[name]['options'] is not None:
+            # Replace a bad value with a good one if there is a defined set of
+            # specified good values. If there isn't, we can assume that
+            # anything goes.
+            if value not in self._defaults_dict[name]['options']:
+                good_value = self._defaults_dict[name]['default']
+                wmsg = ('Attempting to set invalid value {!r} for '
+                        'attribute {!r}. Defaulting to {!r}.')
+                warnings.warn(wmsg.format(value, name, good_value))
+                value = good_value
+        self.__dict__[name] = value
+
+    @property
+    def _defaults_dict(self):
+        # Set this as a property so that it isn't added to `self.__dict__`.
+        return {'conventions_override': {'default': False,
+                                         'options': [True, False]},
+                }
+
+    @contextlib.contextmanager
+    def context(self, **kwargs):
+        """
+        Allow temporary modification of the options via a context manager.
+        Accepted kwargs are the same as can be supplied to the Option.
+
+        """
+        # Snapshot the starting state for restoration at the end of the
+        # contextmanager block.
+        starting_state = self.__dict__.copy()
+        # Update the state to reflect the requested changes.
+        for name, value in six.iteritems(kwargs):
+            setattr(self, name, value)
+        try:
+            yield
+        finally:
+            # Return the state to the starting state.
+            self.__dict__.clear()
+            self.__dict__.update(starting_state)
 
 
-RULE_LOG_IGNORE = get_option(_LOGGING_SECTION, 'rule_ignore')
-
-
-IMPORT_LOGGER = get_option(_LOGGING_SECTION, 'import_logger')
+netcdf = NetCDF()

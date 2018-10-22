@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -33,7 +33,8 @@ To manage a collection of FormatSpecifications for loading::
 
 To identify a specific format from a file::
 
-    handling_spec = fagent.get_spec(png_filename, open(png_filename, 'rb'))
+    with open(png_filename, 'rb') as png_fh:
+        handling_spec = fagent.get_spec(png_filename, png_fh)
 
 In the example, handling_spec will now be the png_spec previously added to the agent.
 
@@ -49,7 +50,13 @@ The calling sequence of handler is dependent on the function given in the origin
 
 
 """
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
+
 import collections
+import functools
 import os
 import struct
 
@@ -135,7 +142,7 @@ class FormatAgent(object):
                 return format_spec
 
         printable_values = {}
-        for key, value in element_cache.iteritems():
+        for key, value in six.iteritems(element_cache):
             value = str(value)
             if len(value) > 50:
                 value = value[:50] + '...'
@@ -145,6 +152,7 @@ class FormatAgent(object):
         raise ValueError(msg)
 
 
+@functools.total_ordering
 class FormatSpecification(object):
     """
     Provides the base class for file type definition.
@@ -153,7 +161,8 @@ class FormatSpecification(object):
     a FileElement, such as filename extension or 32-bit magic number, with an associated value for format identification.
 
     """
-    def __init__(self, format_name, file_element, file_element_value, handler=None, priority=0):
+    def __init__(self, format_name, file_element, file_element_value,
+                 handler=None, priority=0, constraint_aware_handler=False):
         """
         Constructs a new FormatSpecification given the format_name and particular FileElements
 
@@ -179,6 +188,7 @@ class FormatSpecification(object):
         self._format_name = format_name
         self._handler = handler
         self.priority = priority
+        self.constraint_aware_handler = constraint_aware_handler
 
     def __hash__(self):
         # Hashed by specification for consistent ordering in FormatAgent (including self._handler in this hash
@@ -203,11 +213,23 @@ class FormatSpecification(object):
         """The handler function of this FileFormat. (Read only)"""
         return self._handler
 
-    def __cmp__(self, other):
+    def _sort_key(self):
+        return (-self.priority, self.name, self.file_element)
+
+    def __lt__(self, other):
         if not isinstance(other, FormatSpecification):
             return NotImplemented
 
-        return cmp( (-self.priority, hash(self)), (-other.priority, hash(other)) )
+        return self._sort_key() < other._sort_key()
+
+    def __eq__(self, other):
+        if not isinstance(other, FormatSpecification):
+            return NotImplemented
+
+        return self._sort_key() == other._sort_key()
+
+    def __ne__(self, other):
+        return not (self == other)
 
     def __repr__(self):
         # N.B. loader is not always going to provide a nice repr if it is a lambda function, hence a prettier version is available in __str__

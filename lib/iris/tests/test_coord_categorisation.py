@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -18,11 +18,15 @@
 Test the coordinate categorisation functions.
 """
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
 
 import warnings
 
+import cf_units
 import numpy as np
 
 import iris
@@ -61,7 +65,7 @@ class TestCategorisations(tests.IrisTest):
 
         time_coord = iris.coords.DimCoord(
             day_numbers, standard_name='time',
-            units=iris.unit.Unit('days since epoch', 'gregorian'))
+            units=cf_units.Unit('days since epoch', 'gregorian'))
         cube.add_dim_coord(time_coord, 0)
 
         self.cube = cube
@@ -87,14 +91,14 @@ class TestCategorisations(tests.IrisTest):
             with warnings.catch_warnings(record=True):
                 func(cube, 'time', **kwargs)
             result_coords = cube.coords(result_name)
-            self.assertEqual(len(result_coords), 1, fmt.format(func.func_name))
+            self.assertEqual(len(result_coords), 1, fmt.format(func.__name__))
             # Specify source coordinate by coordinate reference
             cube = self.cube.copy()
             time = cube.coord('time')
             with warnings.catch_warnings(record=True):
                 func(cube, time, **kwargs)
             result_coords = cube.coords(result_name)
-            self.assertEqual(len(result_coords), 1, fmt.format(func.func_name))
+            self.assertEqual(len(result_coords), 1, fmt.format(func.__name__))
 
     def test_basic(self):
         cube = self.cube

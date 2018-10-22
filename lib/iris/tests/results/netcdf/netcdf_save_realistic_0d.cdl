@@ -9,8 +9,7 @@ variables:
 	int rotated_latitude_longitude ;
 		rotated_latitude_longitude:grid_mapping_name = "rotated_latitude_longitude" ;
 		rotated_latitude_longitude:longitude_of_prime_meridian = 0. ;
-		rotated_latitude_longitude:semi_major_axis = 6371229. ;
-		rotated_latitude_longitude:semi_minor_axis = 6371229. ;
+		rotated_latitude_longitude:earth_radius = 6371229. ;
 		rotated_latitude_longitude:grid_north_pole_latitude = 37.5 ;
 		rotated_latitude_longitude:grid_north_pole_longitude = 177.5 ;
 		rotated_latitude_longitude:north_pole_grid_longitude = 0. ;
@@ -29,12 +28,12 @@ variables:
 	float grid_longitude_bnds(bnds) ;
 	float level_height ;
 		level_height:bounds = "level_height_bnds" ;
-		level_height:axis = "Z" ;
-		level_height:formula_terms = "a: level_height b: sigma orog: surface_altitude" ;
 		level_height:units = "m" ;
-		level_height:standard_name = "atmosphere_hybrid_height_coordinate" ;
 		level_height:long_name = "level_height" ;
 		level_height:positive = "up" ;
+		level_height:standard_name = "atmosphere_hybrid_height_coordinate" ;
+		level_height:axis = "Z" ;
+		level_height:formula_terms = "a: level_height b: sigma orog: surface_altitude" ;
 	float level_height_bnds(bnds) ;
 	int model_level_number ;
 		model_level_number:units = "1" ;

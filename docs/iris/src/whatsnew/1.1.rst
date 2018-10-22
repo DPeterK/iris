@@ -5,6 +5,7 @@ What's new in Iris 1.1
 :Date: 7 Dec, 2012
 
 This document explains the new/changed features of Iris in version 1.1.
+(:doc:`View all changes <index>`.)
 
 With the release of Iris 1.1, we are introducing support for Mac OS X.
 Version 1.1 also sees the first batch of performance enhancements, with
@@ -86,7 +87,7 @@ one might do::
 
     >>> seasons = ['mamjja', 'sondjf']
     >>> iris.coord_categorisation.add_custom_season(cube, 'time', seasons)
-    >>> print cube.coord('season').points
+    >>> print(cube.coord('season').points)
     ['ondjfm' 'ondjfm' 'mamjja' 'mamjja' 'mamjja' 'mamjja' 'mamjja' 'mamjja'
      'ondjfm' 'ondjfm' 'ondjfm' 'ondjfm']
 

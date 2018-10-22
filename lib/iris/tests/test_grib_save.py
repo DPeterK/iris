@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -15,15 +15,16 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
 
 import os
-import warnings
 import datetime
 
-import gribapi
+import cf_units
 import numpy as np
 
 import iris
@@ -31,79 +32,88 @@ import iris.cube
 import iris.coord_systems
 import iris.coords
 
+if tests.GRIB_AVAILABLE:
+    import gribapi
+    from iris_grib._load_convert import _MDI as MDI
 
-@iris.tests.skip_data
-class TestLoadSave(tests.IrisTest):
-    # load and save grib
+
+@tests.skip_data
+@tests.skip_grib
+class TestLoadSave(tests.TestGribMessage):
 
     def setUp(self):
-        iris.fileformats.grib.hindcast_workaround = True
-
-    def tearDown(self):
-        iris.fileformats.grib.hindcast_workaround = False
-
-    def save_and_compare(self, source_grib, reference_text):
-        """Load and save grib data, generate diffs, compare with expected diffs."""
-
-        # load and save from Iris
-        cubes = iris.load(source_grib)
-
-        saved_grib = iris.util.create_temp_filename(suffix='.grib2')
-        iris.save(cubes, saved_grib)
-
-        # missing reference? (the expected diffs between source_grib and saved_grib)
-        if not os.path.exists(reference_text):
-            warnings.warn("Creating grib compare reference %s" % reference_text)
-            os.system("grib_compare %s %s > %s" % (source_grib, saved_grib, reference_text))
-
-        # generate and compare diffs
-        compare_text = iris.util.create_temp_filename(suffix='.grib_compare.txt')
-        os.system("grib_compare %s %s > %s" % (source_grib, saved_grib, compare_text))
-        self.assertTextFile(compare_text, reference_text, "grib_compare output")
-
-        os.remove(saved_grib)
-        os.remove(compare_text)
+        self.skip_keys = []
 
     def test_latlon_forecast_plev(self):
         source_grib = tests.get_data_path(("GRIB", "uk_t", "uk_t.grib2"))
-        reference_text = tests.get_result_path(("grib_save", "latlon_forecast_plev.grib_compare.txt"))
-        self.save_and_compare(source_grib, reference_text)
+        cubes = iris.load(source_grib)
+        with self.temp_filename(suffix='.grib2') as temp_file_path:
+            iris.save(cubes, temp_file_path)
+            expect_diffs = {'totalLength': (4837, 4832),
+                            'productionStatusOfProcessedData': (0, 255),
+                            'scaleFactorOfRadiusOfSphericalEarth': (MDI,
+                                                                    0),
+                            'shapeOfTheEarth': (0, 1),
+                            'scaledValueOfRadiusOfSphericalEarth': (MDI,
+                                                                    6367470),
+                            'typeOfGeneratingProcess': (0, 255),
+                            'generatingProcessIdentifier': (128, 255),
+                            }
+            self.assertGribMessageDifference(source_grib, temp_file_path,
+                                             expect_diffs, self.skip_keys,
+                                             skip_sections=[2])
 
     def test_rotated_latlon(self):
-        source_grib = tests.get_data_path(("GRIB", "rotated_nae_t", "sensible_pole.grib2"))
-        reference_text = tests.get_result_path(("grib_save", "rotated_latlon.grib_compare.txt"))
-        # TODO: Investigate small change in test result:
-        #       long [iDirectionIncrement]: [109994] != [109993]
-        #       Consider the change in dx_dy() to "InDegrees" too.
-        self.save_and_compare(source_grib, reference_text)
-
-# XXX Addressed in #1118 pending #1039 for hybrid levels
-#    def test_hybrid_pressure_levels(self):
-#        source_grib = tests.get_data_path(("GRIB", "ecmwf_standard", "t0.grib2"))
-#        reference_text = tests.get_result_path(("grib_save", "hybrid_pressure.grib_compare.txt"))
-#        self.save_and_compare(source_grib, reference_text)
+        source_grib = tests.get_data_path(("GRIB", "rotated_nae_t",
+                                           "sensible_pole.grib2"))
+        cubes = iris.load(source_grib)
+        with self.temp_filename(suffix='.grib2') as temp_file_path:
+            iris.save(cubes, temp_file_path)
+            expect_diffs = {'totalLength': (648196, 648191),
+                            'productionStatusOfProcessedData': (0, 255),
+                            'scaleFactorOfRadiusOfSphericalEarth': (MDI,
+                                                                    0),
+                            'shapeOfTheEarth': (0, 1),
+                            'scaledValueOfRadiusOfSphericalEarth': (MDI,
+                                                                    6367470),
+                            'longitudeOfLastGridPoint': (392109982, 32106370),
+                            'latitudeOfLastGridPoint': (19419996, 19419285),
+                            'typeOfGeneratingProcess': (0, 255),
+                            'generatingProcessIdentifier': (128, 255),
+                            }
+            self.assertGribMessageDifference(source_grib, temp_file_path,
+                                             expect_diffs, self.skip_keys,
+                                             skip_sections=[2])
 
     def test_time_mean(self):
         # This test for time-mean fields also tests negative forecast time.
-        # Because the results depend on the presence of our api patch,
-        # we currently have results for both a patched and unpatched api.
-        # If the api ever allows -ve ft, we should revert to a single result.
         source_grib = tests.get_data_path(("GRIB", "time_processed",
                                            "time_bound.grib2"))
-        reference_text = tests.get_result_path(("grib_save",
-                                                "time_mean.grib_compare.txt"))
-        # TODO: It's not ideal to have grib patch awareness here...
-        import unittest
-        try:
-            self.save_and_compare(source_grib, reference_text)
-        except unittest.TestCase.failureException:
-            reference_text = tests.get_result_path((
-                                        "grib_save",
-                                        "time_mean.grib_compare.FT_PATCH.txt"))
-            self.save_and_compare(source_grib, reference_text)
+        cubes = iris.load(source_grib)
+        expect_diffs = {'totalLength': (21232, 21227),
+                        'productionStatusOfProcessedData': (0, 255),
+                        'scaleFactorOfRadiusOfSphericalEarth': (MDI,
+                                                                0),
+                        'shapeOfTheEarth': (0, 1),
+                        'scaledValueOfRadiusOfSphericalEarth': (MDI,
+                                                                6367470),
+                        'longitudeOfLastGridPoint': (356249908, 356249809),
+                        'latitudeOfLastGridPoint': (-89999938, -89999944),
+                        'typeOfGeneratingProcess': (0, 255),
+                        'generatingProcessIdentifier': (128, 255),
+                        'typeOfTimeIncrement': (2, 255)
+                        }
+        self.skip_keys.append('stepType')
+        self.skip_keys.append('stepTypeInternal')
+        with self.temp_filename(suffix='.grib2') as temp_file_path:
+            iris.save(cubes, temp_file_path)
+            self.assertGribMessageDifference(source_grib, temp_file_path,
+                                             expect_diffs, self.skip_keys,
+                                             skip_sections=[2])
 
 
-@iris.tests.skip_data
+@tests.skip_data
+@tests.skip_grib
 class TestCubeSave(tests.IrisTest):
     # save fabricated cubes
 
@@ -141,7 +151,7 @@ class TestCubeSave(tests.IrisTest):
     def test_forecast_period(self):
         # unhandled unit
         cube = self._load_basic()
-        cube.coord("forecast_period").units = iris.unit.Unit("years")
+        cube.coord("forecast_period").units = cf_units.Unit("years")
         saved_grib = iris.util.create_temp_filename(suffix='.grib2')
         self.assertRaises(iris.exceptions.TranslationError, iris.save, cube, saved_grib)
         os.remove(saved_grib)
@@ -190,6 +200,7 @@ class TestCubeSave(tests.IrisTest):
                     1949.0)
 
 
+@tests.skip_grib
 class TestHandmade(tests.IrisTest):
 
     def _lat_lon_cube_no_time(self):
@@ -203,7 +214,7 @@ class TestHandmade(tests.IrisTest):
 
     def _cube_time_no_forecast(self):
         cube = self._lat_lon_cube_no_time()
-        unit = iris.unit.Unit('hours since epoch', calendar=iris.unit.CALENDAR_GREGORIAN)
+        unit = cf_units.Unit('hours since epoch', calendar=cf_units.CALENDAR_GREGORIAN)
         dt = datetime.datetime(2010, 12, 31, 12, 0)
         cube.add_aux_coord(iris.coords.AuxCoord(np.array([unit.date2num(dt)], dtype=np.float64), 'time', units=unit))
         return cube
@@ -220,7 +231,7 @@ class TestHandmade(tests.IrisTest):
 
     def _cube_with_time_bounds(self):
         cube = self._cube_with_pressure()
-        cube.coord("time").bounds = np.array([[0,100]])
+        cube.coord("time").bounds = np.array([[0, 100]])
         return cube
 
     def test_no_time_cube(self):

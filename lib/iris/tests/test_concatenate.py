@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013, Met Office
+# (C) British Crown Copyright 2013 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -19,6 +19,9 @@ Test the cube concatenate mechanism.
 
 """
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # import iris tests first so that some things can be initialised
 # before importing anything else.
 import iris.tests as tests
@@ -26,7 +29,6 @@ import iris.tests as tests
 import numpy as np
 import numpy.ma as ma
 
-from iris._concatenate import _CubeSignature as ConcatenateCubeSignature
 import iris.cube
 from iris.coords import DimCoord, AuxCoord
 import iris.tests.stock as stock
@@ -215,13 +217,13 @@ def concatenate(cubes, order=None):
 
     for cube in result:
         if ma.isMaskedArray(cube.data):
-#            cube.data = ma.copy(cube.data, order=order)
+            # cube.data = ma.copy(cube.data, order=order)
             data = np.array(cube.data.data, copy=True, order=order)
             mask = np.array(cube.data.mask, copy=True, order=order)
             fill_value = cube.data.fill_value
             cube.data = ma.array(data, mask=mask, fill_value=fill_value)
         else:
-#            cube.data = np.copy(cube.data, order=order)
+            # cube.data = np.copy(cube.data, order=order)
             cube.data = np.array(cube.data, copy=True, order=order)
 
     return result
@@ -242,7 +244,7 @@ class TestSimple(tests.IrisTest):
 
 
 class TestNoConcat(tests.IrisTest):
-    def test_anonymous(self):
+    def test_one_cube_has_anon_dim(self):
         cubes = []
         y = (0, 2)
         cubes.append(_make_cube((0, 2), y, 1))
@@ -307,7 +309,7 @@ class TestNoConcat(tests.IrisTest):
         result = concatenate(cubes)
         self.assertEqual(len(result), 2)
 
-    def test_order(self):
+    def test_order_difference(self):
         cubes = []
         y = (0, 2)
         cubes.append(_make_cube((0, 2), y, 1))
@@ -315,7 +317,19 @@ class TestNoConcat(tests.IrisTest):
         result = concatenate(cubes)
         self.assertEqual(len(result), 2)
 
-    def test_masked_vs_unmasked(self):
+
+class Test2D(tests.IrisTest):
+    def test_masked_and_unmasked(self):
+        cubes = []
+        y = (0, 2)
+        cube = _make_cube((2, 4), y, 2)
+        cube.data = ma.asarray(cube.data)
+        cubes.append(cube)
+        cubes.append(_make_cube((0, 2), y, 1))
+        result = concatenate(cubes)
+        self.assertEqual(len(result), 1)
+
+    def test_unmasked_and_masked(self):
         cubes = []
         y = (0, 2)
         cubes.append(_make_cube((0, 2), y, 1))
@@ -323,7 +337,7 @@ class TestNoConcat(tests.IrisTest):
         cube.data = ma.asarray(cube.data)
         cubes.append(cube)
         result = concatenate(cubes)
-        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result), 1)
 
     def test_masked_fill_value(self):
         cubes = []
@@ -337,10 +351,8 @@ class TestNoConcat(tests.IrisTest):
         cube.data.fill_value = 20
         cubes.append(cube)
         result = concatenate(cubes)
-        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result), 1)
 
-
-class Test2D(tests.IrisTest):
     def test_concat_masked_2x2d(self):
         cubes = []
         y = (0, 2)
@@ -366,6 +378,50 @@ class Test2D(tests.IrisTest):
         cube = _make_cube(x, (0, 2), 1)
         cube.data = np.ma.asarray(cube.data)
         cube.data[(0, 1), (0, 1)] = ma.masked
+        cubes.append(cube)
+        cube = _make_cube(x, (2, 4), 2)
+        cube.data = ma.asarray(cube.data)
+        cube.data[(0, 1), (1, 0)] = ma.masked
+        cubes.append(cube)
+        result = concatenate(cubes)
+        self.assertCML(result, ('concatenate', 'concat_masked_2y2d.cml'))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].shape, (4, 2))
+        mask = np.array([[True, False],
+                         [False, True],
+                         [False, True],
+                         [True, False]], dtype=np.bool)
+        self.assertArrayEqual(result[0].data.mask, mask)
+
+    def test_concat_masked_2y2d_with_concrete_and_lazy(self):
+        cubes = []
+        x = (0, 2)
+        cube = _make_cube(x, (0, 2), 1)
+        cube.data = np.ma.asarray(cube.data)
+        cube.data[(0, 1), (0, 1)] = ma.masked
+        cubes.append(cube)
+        cube = _make_cube(x, (2, 4), 2)
+        cube.data = ma.asarray(cube.data)
+        cube.data[(0, 1), (1, 0)] = ma.masked
+        cube.data = cube.lazy_data()
+        cubes.append(cube)
+        result = concatenate(cubes)
+        self.assertCML(result, ('concatenate', 'concat_masked_2y2d.cml'))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].shape, (4, 2))
+        mask = np.array([[True, False],
+                         [False, True],
+                         [False, True],
+                         [True, False]], dtype=np.bool)
+        self.assertArrayEqual(result[0].data.mask, mask)
+
+    def test_concat_masked_2y2d_with_lazy_and_concrete(self):
+        cubes = []
+        x = (0, 2)
+        cube = _make_cube(x, (0, 2), 1)
+        cube.data = np.ma.asarray(cube.data)
+        cube.data[(0, 1), (0, 1)] = ma.masked
+        cube.data = cube.lazy_data()
         cubes.append(cube)
         cube = _make_cube(x, (2, 4), 2)
         cube.data = ma.asarray(cube.data)
@@ -865,15 +921,6 @@ class Test3D(tests.IrisTest):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].shape, (8, 8, 8))
-
-
-class TestCubeSignatureEquality(tests.IrisTest):
-    def test_not_implemented(self):
-        class Terry(object):
-            pass
-        sig = ConcatenateCubeSignature(iris.cube.Cube(0))
-        self.assertIs(sig.__eq__(Terry()), NotImplemented)
-        self.assertIs(sig.__ne__(Terry()), NotImplemented)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,29 +16,35 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 """Unit tests for the `iris.fileformats.pp._interpret_field` function."""
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
 from copy import deepcopy
-
-import mock
 import numpy as np
 
 import iris.fileformats.pp as pp
+from iris.tests import mock
 
 
 class Test__interpret_fields__land_packed_fields(tests.IrisTest):
     def setUp(self):
+        return_value = ('dummy', 0, 0, np.dtype('f4'))
+        core_data = mock.MagicMock(return_value=return_value)
         # A field packed using a land/sea mask.
-        self.pp_field = mock.Mock(lblrec=1, lbext=0, lbuser=[0],
+        self.pp_field = mock.Mock(lblrec=1, lbext=0, lbuser=[0] * 7,
                                   lbrow=0, lbnpt=0,
-                                  lbpack=mock.Mock(n2=2))
+                                  raw_lbpack=20,
+                                  core_data=core_data)
         # The field specifying the land/seamask.
-        self.land_mask_field = mock.Mock(lblrec=1, lbext=0, lbuser=[0],
+        lbuser = [None, None, None, 30, None, None, 1]  # m01s00i030
+        self.land_mask_field = mock.Mock(lblrec=1, lbext=0, lbuser=lbuser,
                                          lbrow=3, lbnpt=4,
-                                         stash='m01s00i030',
-                                         data=np.empty((3, 4)))
+                                         raw_lbpack=0,
+                                         core_data=core_data)
 
     def test_non_deferred_fix_lbrow_lbnpt(self):
         # Checks the fix_lbrow_lbnpt is applied to fields which are not
@@ -50,7 +56,7 @@ class Test__interpret_fields__land_packed_fields(tests.IrisTest):
         self.assertEqual(f1.lbrow, 3)
         self.assertEqual(f1.lbnpt, 4)
         # Check the data's shape has been updated too.
-        self.assertEqual(f1._data.shape, (3, 4))
+        self.assertEqual(f1.data.shape, (3, 4))
 
     def test_fix_lbrow_lbnpt_no_mask_available(self):
         # Check a warning is issued when loading a land masked field
@@ -92,11 +98,12 @@ class Test__interpret_fields__land_packed_fields(tests.IrisTest):
         f2 = deepcopy(self.pp_field)
         self.assertIsNot(f1, f2)
         with mock.patch('iris.fileformats.pp.PPDataProxy') as PPDataProxy:
-            PPDataProxy.return_value = mock.MagicMock()
+            PPDataProxy.return_value = mock.MagicMock(shape=(3, 4),
+                                                      dtype=np.float32)
             list(pp._interpret_fields([f1, self.land_mask_field, f2]))
         for call in PPDataProxy.call_args_list:
             positional_args = call[0]
-            self.assertIs(positional_args[7], self.land_mask_field)
+            self.assertIs(positional_args[8], self.land_mask_field)
 
 
 if __name__ == "__main__":

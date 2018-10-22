@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,10 +16,14 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 """Rules for converting NIMROD fields into cubes."""
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 
 import warnings
 
-import netcdftime
+import cf_units
+import cftime
 import numpy as np
 
 import iris
@@ -30,14 +34,21 @@ from iris.exceptions import TranslationError
 __all__ = ['run']
 
 
-MERIDIAN_SCALING_BNG = 999601  # Merdian scaling for British National grid.
+# Meridian scaling for British National grid.
+MERIDIAN_SCALING_BNG = 0.9996012717
 
-TIME_UNIT = iris.unit.Unit('hours since 1970-01-01 00:00:00',
-                           calendar=iris.unit.CALENDAR_STANDARD)
+NIMROD_DEFAULT = -32767.0
+
+TIME_UNIT = cf_units.Unit('hours since 1970-01-01 00:00:00',
+                          calendar=cf_units.CALENDAR_GREGORIAN)
 
 
-FIELD_CODES = {"orography": 73}
-VERTICAL_CODES = {"height": 0, "altitude": 1, "levels_below_ground": 12}
+FIELD_CODES = {73: "orography"}
+VERTICAL_CODES = {0: "height", 1: "altitude", 12: "levels_below_ground"}
+
+
+class TranslationWarning(Warning):
+    pass
 
 
 def name(cube, field):
@@ -65,9 +76,9 @@ def units(cube, field):
 
 def time(cube, field):
     """Add a time coord to the cube."""
-    valid_date = netcdftime.datetime(field.vt_year, field.vt_month,
-                                     field.vt_day, field.vt_hour,
-                                     field.vt_minute, field.vt_second)
+    valid_date = cftime.datetime(field.vt_year, field.vt_month,
+                                 field.vt_day, field.vt_hour,
+                                 field.vt_minute, field.vt_second)
     point = TIME_UNIT.date2num(valid_date)
 
     bounds = None
@@ -86,9 +97,9 @@ def time(cube, field):
 def reference_time(cube, field):
     """Add a 'reference time' to the cube, if present in the field."""
     if field.dt_year != field.int_mdi:
-        data_date = netcdftime.datetime(field.dt_year, field.dt_month,
-                                        field.dt_day, field.dt_hour,
-                                        field.dt_minute)
+        data_date = cftime.datetime(field.dt_year, field.dt_month,
+                                    field.dt_day, field.dt_hour,
+                                    field.dt_minute)
 
         ref_time_coord = DimCoord(TIME_UNIT.date2num(data_date),
                                   standard_name='forecast_reference_time',
@@ -114,17 +125,19 @@ def proj_biaxial_ellipsoid(cube, field):
 
 def tm_meridian_scaling(cube, field):
     """
-    Deal with 'tm_meridian_scaling', if present in the field.
+    Deal with the scale factor on the central meridian for transverse mercator
+    projections if present in the field.
 
     Currently only caters for British National Grid.
 
     """
-    if field.tm_meridian_scaling != field.int_mdi:
-        if int(field.tm_meridian_scaling * 1e6) == MERIDIAN_SCALING_BNG:
+    if field.tm_meridian_scaling not in [field.float32_mdi, NIMROD_DEFAULT]:
+        if abs(field.tm_meridian_scaling - MERIDIAN_SCALING_BNG) < 1e-6:
             pass  # This is the expected value for British National Grid
         else:
-            raise TranslationError("tm_meridian_scaling not yet handled: {}".
-                                   format(field.tm_meridian_scaling))
+            warnings.warn("tm_meridian_scaling not yet handled: {}"
+                          "".format(field.tm_meridian_scaling),
+                          TranslationWarning)
 
 
 def british_national_grid_x(cube, field):
@@ -143,10 +156,10 @@ def british_national_grid_y(cube, field):
 
     """
     if field.origin_corner == 0:  # top left
-        y_coord = DimCoord(np.arange(field.num_rows)[::-1] *
-                           -field.row_step + field.y_origin,
-                           standard_name="projection_y_coordinate", units="m",
-                           coord_system=iris.coord_systems.OSGB())
+        y_coord = DimCoord(
+            np.arange(field.num_rows)[::-1] * -field.row_step + field.y_origin,
+            standard_name="projection_y_coordinate", units="m",
+            coord_system=iris.coord_systems.OSGB())
         cube.add_dim_coord(y_coord, 0)
     else:
         raise TranslationError("Corner {0} not yet implemented".
@@ -216,18 +229,21 @@ def levels_below_ground_vertical_coord(cube, field):
 def vertical_coord(cube, field):
     """Add a vertical coord to the cube."""
     v_type = field.vertical_coord_type
-    if v_type != field.int_mdi:
-        if field.field_code == FIELD_CODES["orography"]:
+
+    if v_type not in [field.int_mdi, NIMROD_DEFAULT]:
+        if FIELD_CODES.get(field.field_code, None) == "orography":
             orography_vertical_coord(cube, field)
-        elif v_type == VERTICAL_CODES["height"]:
-            height_vertical_coord(cube, field)
-        elif v_type == VERTICAL_CODES["altitude"]:
-            altitude_vertical_coord(cube, field)
-        elif v_type == VERTICAL_CODES["levels_below_ground"]:
-            levels_below_ground_vertical_coord(cube, field)
         else:
-            raise TranslationError("Vertical coord type %d not yet handled" %
-                                   v_type)
+            vertical_code_name = VERTICAL_CODES.get(v_type, None)
+            if vertical_code_name == "height":
+                height_vertical_coord(cube, field)
+            elif vertical_code_name == "altitude":
+                altitude_vertical_coord(cube, field)
+            elif vertical_code_name == "levels_below_ground":
+                levels_below_ground_vertical_coord(cube, field)
+            else:
+                warnings.warn("Vertical coord {!r} not yet handled"
+                              "".format(v_type), TranslationWarning)
 
 
 def ensemble_member(cube, field):

@@ -1,21 +1,20 @@
 dimensions:
-	pseudo_level = UNLIMITED ; // (4 currently)
 	bnds = 2 ;
 	depth = 20 ;
 	grid_latitude = 143 ;
+	pseudo_level = 4 ;
 	time = 4 ;
 variables:
-	float unknown(pseudo_level, time, depth, grid_latitude) ;
-		unknown:_FillValue = -1.e+30f ;
-		unknown:ukmo__um_stash_source = "m02s00i???" ;
-		unknown:cell_methods = "time: mean" ;
-		unknown:grid_mapping = "rotated_latitude_longitude" ;
-		unknown:coordinates = "forecast_period forecast_reference_time" ;
+	float m02s00i___(pseudo_level, time, depth, grid_latitude) ;
+		m02s00i___:_FillValue = 9.96921e+36f ;
+		m02s00i___:um_stash_source = "m02s00i???" ;
+		m02s00i___:cell_methods = "time: mean" ;
+		m02s00i___:grid_mapping = "rotated_latitude_longitude" ;
+		m02s00i___:coordinates = "forecast_period forecast_reference_time" ;
 	int rotated_latitude_longitude ;
 		rotated_latitude_longitude:grid_mapping_name = "rotated_latitude_longitude" ;
 		rotated_latitude_longitude:longitude_of_prime_meridian = 0. ;
-		rotated_latitude_longitude:semi_major_axis = 6371229. ;
-		rotated_latitude_longitude:semi_minor_axis = 6371229. ;
+		rotated_latitude_longitude:earth_radius = 6371229. ;
 		rotated_latitude_longitude:grid_north_pole_latitude = 0. ;
 		rotated_latitude_longitude:grid_north_pole_longitude = 0. ;
 		rotated_latitude_longitude:north_pole_grid_longitude = 0. ;
@@ -38,9 +37,11 @@ variables:
 		grid_latitude:axis = "Y" ;
 		grid_latitude:units = "degrees" ;
 		grid_latitude:standard_name = "grid_latitude" ;
-	int forecast_period(time) ;
+	double forecast_period(time) ;
+		forecast_period:bounds = "forecast_period_bnds" ;
 		forecast_period:units = "hours" ;
 		forecast_period:standard_name = "forecast_period" ;
+	double forecast_period_bnds(time, bnds) ;
 	double forecast_reference_time ;
 		forecast_reference_time:units = "hours since 1970-01-01 00:00:00" ;
 		forecast_reference_time:standard_name = "forecast_reference_time" ;

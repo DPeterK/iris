@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013, Met Office
+# (C) British Crown Copyright 2013 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -18,6 +18,10 @@
 Test area weighted regridding.
 
 """
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # import iris tests first so that some things can be initialised
 # before importing anything else.
 import iris.tests as tests
@@ -25,15 +29,13 @@ import iris.tests as tests
 import copy
 import random
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.ma as ma
 
 from iris.experimental.regrid import \
     regrid_area_weighted_rectilinear_src_and_grid as regrid_area_weighted
-import iris.quickplot as qplt
+import iris.analysis._interpolation
 import iris.tests.stock
-
 
 RESULT_DIR = ('experimental', 'regrid',
               'regrid_area_weighted_rectilinear_src_and_grid')
@@ -46,7 +48,7 @@ def _scaled_and_offset_grid(cube, x_scalefactor, y_scalefactor,
     from the horizontal grid of `src`.
 
     """
-    x, y = iris.experimental.regrid._get_xy_dim_coords(cube)
+    x, y = iris.analysis._interpolation.get_xy_dim_coords(cube)
     new_cube = cube.copy()
     new_cube.replace_coord(x * x_scalefactor + x_offset)
     new_cube.replace_coord(y * y_scalefactor + y_offset)
@@ -84,7 +86,7 @@ def _subsampled_grid(cube, x_subsamplefactor, y_subsamplefactor):
     .. note:: The data of the returned cube is populated with zeros.
 
     """
-    x, y = iris.experimental.regrid._get_xy_dim_coords(cube)
+    x, y = iris.analysis._interpolation.get_xy_dim_coords(cube)
     x_dim = cube.coord_dims(x)[0]
     y_dim = cube.coord_dims(y)[0]
     new_x = _subsampled_coord(x, x_subsamplefactor)
@@ -137,7 +139,7 @@ def _resampled_grid(cube, x_samplefactor, y_samplefactor):
     .. note:: The data of the returned cube is populated with zeros.
 
     """
-    x, y = iris.experimental.regrid._get_xy_dim_coords(cube)
+    x, y = iris.analysis._interpolation.get_xy_dim_coords(cube)
     x_dim = cube.coord_dims(x)[0]
     y_dim = cube.coord_dims(y)[0]
     new_x = _resampled_coord(x, x_samplefactor)
@@ -153,7 +155,8 @@ def _resampled_grid(cube, x_samplefactor, y_samplefactor):
     return new_cube
 
 
-class TestAreaWeightedRegrid(tests.GraphicsTest):
+@tests.skip_data
+class TestAreaWeightedRegrid(tests.IrisTest):
     def setUp(self):
         # A cube with a hybrid height derived coordinate.
         self.realistic_cube = iris.tests.stock.realistic_4d()[:2, :5, :20, :30]
@@ -364,19 +367,6 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         dest = _resampled_grid(src, 0.7, 0.8)
         res = regrid_area_weighted(src, dest)
         self.assertCMLApproxData(res, RESULT_DIR + ('hybridheight.cml',))
-        # Consider a single slice to allow visual tests of altitudes.
-        src = src[1, 2]
-        res = res[1, 2]
-        qplt.pcolormesh(res)
-        self.check_graphic()
-        plt.contourf(res.coord('grid_longitude').points,
-                     res.coord('grid_latitude').points,
-                     res.coord('altitude').points)
-        self.check_graphic()
-        plt.contourf(res.coord('grid_longitude').points,
-                     res.coord('grid_latitude').points,
-                     res.coord('surface_altitude').points)
-        self.check_graphic()
 
     def test_missing_data(self):
         src = self.simple_cube.copy()
@@ -448,10 +438,6 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         res = regrid_area_weighted(src, dest)
         self.assertCMLApproxData(res, RESULT_DIR +
                                  ('const_lat_cross_section.cml',))
-        # Plot a single slice.
-        qplt.plot(res[0])
-        qplt.plot(src[0], 'r')
-        self.check_graphic()
 
         # Constant longitude
         src = self.realistic_cube[0, :, :, 10]
@@ -465,10 +451,6 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         res = regrid_area_weighted(src, dest)
         self.assertCMLApproxData(res, RESULT_DIR +
                                  ('const_lon_cross_section.cml',))
-        # Plot a single slice.
-        qplt.plot(res[0])
-        qplt.plot(src[0], 'r')
-        self.check_graphic()
 
     def test_scalar_source_cube(self):
         src = self.simple_cube[1, 2]
@@ -491,8 +473,7 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         src.coord('longitude').guess_bounds()
         dest = _resampled_grid(src, 0.4, 0.3)
         res = regrid_area_weighted(src, dest)
-        qplt.pcolormesh(res)
-        self.check_graphic()
+        self.assertArrayShapeStats(res, (21, 38), 280.484932, 15.831545)
 
     @tests.skip_data
     def test_global_data_increase_res(self):
@@ -501,8 +482,7 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         src.coord('longitude').guess_bounds()
         dest = _resampled_grid(src, 1.5, 1.5)
         res = regrid_area_weighted(src, dest)
-        qplt.pcolormesh(res)
-        self.check_graphic()
+        self.assertArrayShapeStats(res, (109, 144), 280.349625, 16.073397)
 
     @tests.skip_data
     def test_global_data_same_res(self):
@@ -510,8 +490,7 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         src.coord('latitude').guess_bounds()
         src.coord('longitude').guess_bounds()
         res = regrid_area_weighted(src, src)
-        qplt.pcolormesh(res)
-        self.check_graphic()
+        self.assertArrayShapeStats(res, (73, 96), 279.945160, 16.345842)
 
     @tests.skip_data
     def test_global_data_subset(self):
@@ -531,9 +510,7 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         dest.add_dim_coord(dest_lon, 1)
 
         res = regrid_area_weighted(src, dest)
-        qplt.pcolormesh(res)
-        plt.gca().coastlines()
-        self.check_graphic()
+        self.assertArrayShapeStats(res, (40, 30), 280.979310, 16.640421)
 
     @tests.skip_data
     def test_circular_subset(self):
@@ -553,9 +530,7 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         dest.add_dim_coord(dest_lon, 1)
 
         res = regrid_area_weighted(src, dest)
-        qplt.pcolormesh(res)
-        plt.gca().coastlines()
-        self.check_graphic()
+        self.assertArrayShapeStats(res, (40, 7), 285.653960, 15.212710)
 
     @tests.skip_data
     def test_non_circular_subset(self):
@@ -576,9 +551,7 @@ class TestAreaWeightedRegrid(tests.GraphicsTest):
         dest.add_dim_coord(dest_lon, 1)
 
         res = regrid_area_weighted(src, dest)
-        qplt.pcolormesh(res)
-        plt.gca().coastlines()
-        self.check_graphic()
+        self.assertArrayShapeStats(res, (40, 7), 285.550814, 15.190245)
 
 
 if __name__ == "__main__":

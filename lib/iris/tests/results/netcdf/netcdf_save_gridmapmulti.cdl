@@ -1,10 +1,10 @@
 dimensions:
-	grid_longitude = UNLIMITED ; // (2 currently)
-	longitude = UNLIMITED ; // (2 currently)
-	longitude_0 = UNLIMITED ; // (2 currently)
 	grid_latitude = 2 ;
+	grid_longitude = 2 ;
 	latitude = 2 ;
 	latitude_0 = 2 ;
+	longitude = 2 ;
+	longitude_0 = 2 ;
 variables:
 	int64 air_temperature(longitude, latitude) ;
 		air_temperature:standard_name = "air_temperature" ;
@@ -12,8 +12,7 @@ variables:
 	int latitude_longitude ;
 		latitude_longitude:grid_mapping_name = "latitude_longitude" ;
 		latitude_longitude:longitude_of_prime_meridian = 0. ;
-		latitude_longitude:semi_major_axis = 6371229. ;
-		latitude_longitude:semi_minor_axis = 6371229. ;
+		latitude_longitude:earth_radius = 6371229. ;
 	int64 longitude(longitude) ;
 		longitude:axis = "X" ;
 		longitude:units = "degrees_east" ;
@@ -30,8 +29,7 @@ variables:
 	int latitude_longitude_0 ;
 		latitude_longitude_0:grid_mapping_name = "latitude_longitude_0" ;
 		latitude_longitude_0:longitude_of_prime_meridian = 0. ;
-		latitude_longitude_0:semi_major_axis = 6371228. ;
-		latitude_longitude_0:semi_minor_axis = 6371228. ;
+		latitude_longitude_0:earth_radius = 6371228. ;
 	int64 longitude_0(longitude_0) ;
 		longitude_0:axis = "X" ;
 		longitude_0:units = "degrees_east" ;

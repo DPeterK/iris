@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,12 +16,11 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
 
-from __future__ import division
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
-
-import unittest
 
 import numpy as np
 
@@ -29,7 +28,7 @@ import iris.coords
 from iris.coords import Cell
 
 
-class TestCells(unittest.TestCase):
+class TestCells(tests.IrisTest):
     def setUp(self):
         self.cell1 = iris.coords.Cell(3, [2, 4])
         self.cell2 = iris.coords.Cell(360., [350., 370.])
@@ -125,8 +124,8 @@ class TestCells(unittest.TestCase):
         
         # Ensure the Cell's operators return NotImplemented.
         class Terry(object): pass
-        self.assertEquals(self.d.__eq__(Terry()), NotImplemented)
-        self.assertEquals(self.d.__ne__(Terry()), NotImplemented)
+        self.assertEqual(self.d.__eq__(Terry()), NotImplemented)
+        self.assertEqual(self.d.__ne__(Terry()), NotImplemented)
 
     def test_numpy_int_equality(self):
         dtypes = (np.int, np.int16, np.int32, np.int64)

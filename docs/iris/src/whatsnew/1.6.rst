@@ -1,8 +1,11 @@
 What's new in Iris 1.6
 **********************
 
-:Release: 1.6.0
-:Date: 23rd January 2014
+:Release: 1.6.1
+:Date: 18th February 2014
+
+This document explains the new/changed features of Iris in version 1.6.
+(:doc:`View all changes <index>`.)
 
 Iris 1.6 features
 =================
@@ -23,7 +26,7 @@ Iris 1.6 features
         >>> from iris.coords import DimCoord
         >>> iris.FUTURE.cell_datetime_objects = True
         >>> coord = DimCoord([1, 2, 3], 'time', units='hours since epoch')
-        >>> print [str(cell) for cell in coord.cells()]
+        >>> print([str(cell) for cell in coord.cells()])
         ['1970-01-01 01:00:00', '1970-01-01 02:00:00', '1970-01-01 03:00:00']
 
     Note that, either a :class:`datetime.datetime` or :class:`netcdftime.datetime`
@@ -43,14 +46,14 @@ Iris 1.6 features
 
     .. code-block:: python
 
-        >>> print iris.FUTURE
+        >>> print(iris.FUTURE)
         Future(cell_datetime_objects=False)
         >>> with iris.FUTURE.context(cell_datetime_objects=True):
         ...     # Code that expects to deal with datetime-like objects.
-        ...     print iris.FUTURE
+        ...     print(iris.FUTURE)
         ...
         Future(cell_datetime_objects=True)
-        >>> print iris.FUTURE
+        >>> print(iris.FUTURE)
         Future(cell_datetime_objects=False)
 
 .. admonition:: Showcase Feature - Partial date/time ...
@@ -188,6 +191,11 @@ Incompatible changes
   :func:`~iris.coord_categorisation.add_weekday_shortname`        :func:`~iris.coord_categorisation.add_weekday`
   :func:`~iris.coord_categorisation.add_season_month_initials`    :func:`~iris.coord_categorisation.add_season`
   =============================================================== =======================================================
+* When a cube is loaded from PP or GRIB and it has both time and forecast period
+  coordinates, and the time coordinate has bounds, the forecast period coordinate
+  will now also have bounds. These bounds will be aligned with the bounds of the
+  time coordinate taking into account the forecast reference time. Also,
+  the forecast period point will now be aligned with the time point.
 
 Deprecations
 ============
@@ -240,12 +248,12 @@ consuming processing, or to reap the benefit of fast-loading a pickled cube.
 
 .. _rms:
 
-The RPM aggregator supports weights
+The RMS aggregator supports weights
 ===================================
-A :data:`iris.analysis.RMS` aggregator has been extended to allow the use of
+The :data:`iris.analysis.RMS` aggregator has been extended to allow the use of
 weights using the new keyword argument :data:`weights`.
 
-For example, a RMS weighted cube collapse is performed as follows:
+For example, an RMS weighted cube collapse is performed as follows:
 
 .. code-block:: python
 

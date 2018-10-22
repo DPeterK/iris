@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -23,8 +23,11 @@ automatically add a plot title, axis titles, and a colour bar when appropriate.
 See also: :ref:`matplotlib <matplotlib:users-guide-index>`.
 
 """
-import warnings   # deprecation of coords keyword in plot
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
+import cf_units
 import matplotlib.pyplot as plt
 
 import iris.config
@@ -42,14 +45,14 @@ def _use_symbol(units):
 
 
 def _title(cube_or_coord, with_units):
-    if cube_or_coord is None:
+    if cube_or_coord is None or isinstance(cube_or_coord, int):
         title = ''
     else:
         title = cube_or_coord.name().replace('_', ' ').capitalize()
         units = cube_or_coord.units
         if with_units and not (units.is_unknown() or
                                units.is_no_unit() or
-                               units == iris.unit.Unit('1')):
+                               units == cf_units.Unit('1')):
 
             if _use_symbol(units):
                 units = units.symbol
@@ -58,10 +61,13 @@ def _title(cube_or_coord, with_units):
     return title
 
 
-def _label(cube, mode, result=None, ndims=2, coords=None):
+def _label(cube, mode, result=None, ndims=2, coords=None, axes=None):
     """Puts labels on the current plot using the given cube."""
 
-    plt.title(_title(cube, with_units=False))
+    if axes is None:
+        axes = plt.gca()
+
+    axes.set_title(_title(cube, with_units=False))
 
     if result is not None:
         draw_edges = mode == iris.coords.POINT_MODE
@@ -69,7 +75,7 @@ def _label(cube, mode, result=None, ndims=2, coords=None):
                            drawedges=draw_edges)
         has_known_units = not (cube.units.is_unknown() or
                                cube.units.is_no_unit())
-        if has_known_units and cube.units != iris.unit.Unit('1'):
+        if has_known_units and cube.units != cf_units.Unit('1'):
             # Use shortest unit representation for anything other than time
             if _use_symbol(cube.units):
                 bar.set_label(cube.units.symbol)
@@ -86,22 +92,23 @@ def _label(cube, mode, result=None, ndims=2, coords=None):
 
     if ndims == 2:
         if not iplt._can_draw_map(plot_defn.coords):
-            plt.ylabel(_title(plot_defn.coords[0], with_units=True))
-            plt.xlabel(_title(plot_defn.coords[1], with_units=True))
+            axes.set_ylabel(_title(plot_defn.coords[0], with_units=True))
+            axes.set_xlabel(_title(plot_defn.coords[1], with_units=True))
     elif ndims == 1:
-        plt.xlabel(_title(plot_defn.coords[0], with_units=True))
-        plt.ylabel(_title(cube, with_units=True))
+        axes.set_xlabel(_title(plot_defn.coords[0], with_units=True))
+        axes.set_ylabel(_title(cube, with_units=True))
     else:
-        msg = 'Unexpected number of dimensions (%s) given to _label.' % ndims
+        msg = 'Unexpected number of dimensions ({}) given to ' \
+              '_label.'.format(ndims)
         raise ValueError(msg)
 
 
-def _label_with_bounds(cube, result=None, ndims=2, coords=None):
-    _label(cube, iris.coords.BOUND_MODE, result, ndims, coords)
+def _label_with_bounds(cube, result=None, ndims=2, coords=None, axes=None):
+    _label(cube, iris.coords.BOUND_MODE, result, ndims, coords, axes)
 
 
-def _label_with_points(cube, result=None, ndims=2, coords=None):
-    _label(cube, iris.coords.POINT_MODE, result, ndims, coords)
+def _label_with_points(cube, result=None, ndims=2, coords=None, axes=None):
+    _label(cube, iris.coords.POINT_MODE, result, ndims, coords, axes)
 
 
 def _get_titles(u_object, v_object):
@@ -123,15 +130,26 @@ def _get_titles(u_object, v_object):
     return xlabel, ylabel, title
 
 
-def _label_1d_plot(*args):
+def _label_1d_plot(*args, **kwargs):
     if len(args) > 1 and isinstance(args[1],
                                     (iris.cube.Cube, iris.coords.Coord)):
         xlabel, ylabel, title = _get_titles(*args[:2])
     else:
         xlabel, ylabel, title = _get_titles(None, args[0])
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+
+    axes = kwargs.pop('axes', None)
+
+    if len(kwargs) != 0:
+        msg = 'Unexpected kwargs {} given to _label_1d_plot'.format(
+            kwargs.keys())
+        raise ValueError(msg)
+
+    if axes is None:
+        axes = plt.gca()
+
+    axes.set_title(title)
+    axes.set_xlabel(xlabel)
+    axes.set_ylabel(ylabel)
 
 
 def contour(cube, *args, **kwargs):
@@ -155,8 +173,9 @@ def contour(cube, *args, **kwargs):
 
     """
     coords = kwargs.get('coords')
+    axes = kwargs.get('axes')
     result = iplt.contour(cube, *args, **kwargs)
-    _label_with_points(cube, coords=coords)
+    _label_with_points(cube, coords=coords, axes=axes)
     return result
 
 
@@ -181,15 +200,37 @@ def contourf(cube, *args, **kwargs):
 
     """
     coords = kwargs.get('coords')
+    axes = kwargs.get('axes')
     result = iplt.contourf(cube, *args, **kwargs)
-    _label_with_points(cube, result, coords=coords)
+    _label_with_points(cube, result, coords=coords, axes=axes)
     return result
 
 
-def outline(cube, coords=None):
-    """Draws cell outlines on a labelled plot based on the given Cube."""
-    result = iplt.outline(cube, coords=coords)
-    _label_with_bounds(cube, coords=coords)
+def outline(cube, coords=None, color='k', linewidth=None, axes=None):
+    """
+    Draws cell outlines on a labelled plot based on the given Cube.
+
+    Kwargs:
+
+    * coords: list of :class:`~iris.coords.Coord` objects or coordinate names
+        Use the given coordinates as the axes for the plot. The order of the
+        given coordinates indicates which axis to use for each, where the first
+        element is the horizontal axis of the plot and the second element is
+        the vertical axis of the plot.
+
+    * color: None or mpl color
+        The color of the cell outlines. If None, the matplotlibrc setting
+        patch.edgecolor is used by default.
+
+    * linewidth: None or number
+        The width of the lines showing the cell outlines. If None, the default
+        width in patch.linewidth in matplotlibrc is used.
+
+    """
+    result = iplt.outline(cube, color=color, linewidth=linewidth,
+                          coords=coords, axes=axes)
+
+    _label_with_bounds(cube, coords=coords, axes=axes)
     return result
 
 
@@ -201,8 +242,9 @@ def pcolor(cube, *args, **kwargs):
 
     """
     coords = kwargs.get('coords')
+    axes = kwargs.get('axes')
     result = iplt.pcolor(cube, *args, **kwargs)
-    _label_with_bounds(cube, result, coords=coords)
+    _label_with_bounds(cube, result, coords=coords, axes=axes)
     return result
 
 
@@ -214,8 +256,9 @@ def pcolormesh(cube, *args, **kwargs):
 
     """
     coords = kwargs.get('coords')
+    axes = kwargs.get('axes')
     result = iplt.pcolormesh(cube, *args, **kwargs)
-    _label_with_bounds(cube, result, coords=coords)
+    _label_with_bounds(cube, result, coords=coords, axes=axes)
     return result
 
 
@@ -227,12 +270,12 @@ def points(cube, *args, **kwargs):
 
     """
     coords = kwargs.get('coords')
+    axes = kwargs.get('axes')
     result = iplt.points(cube, *args, **kwargs)
-    _label_with_points(cube, coords=coords)
+    _label_with_points(cube, coords=coords, axes=axes)
     return result
 
 
-@iplt._1d_coords_deprecation_handler
 def plot(*args, **kwargs):
     """
     Draws a labelled line plot based on the given cube(s) or
@@ -242,8 +285,9 @@ def plot(*args, **kwargs):
     keyword arguments.
 
     """
+    axes = kwargs.get('axes')
     result = iplt.plot(*args, **kwargs)
-    _label_1d_plot(*args)
+    _label_1d_plot(*args, axes=axes)
     return result
 
 
@@ -256,8 +300,9 @@ def scatter(x, y, *args, **kwargs):
     keyword arguments.
 
     """
+    axes = kwargs.get('axes')
     result = iplt.scatter(x, y, *args, **kwargs)
-    _label_1d_plot(x, y)
+    _label_1d_plot(x, y, axes=axes)
     return result
 
 

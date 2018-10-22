@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -19,6 +19,9 @@ Tests for :func:`iris.experimental.regrid.regrid_conservative_via_esmpy`.
 
 """
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # import iris tests first so that some things can be initialised
 # before importing anything else.
 import iris.tests as tests
@@ -27,14 +30,13 @@ import contextlib
 import os
 import unittest
 
+import cf_units
 import numpy as np
 
 # Import ESMF if installed, else fail quietly + disable all the tests.
 try:
     import ESMF
-    # Check it *is* the real module, and not an iris.proxy FakeModule.
-    ESMF.Manager
-except ImportError, AttributeError:
+except ImportError as AttributeError:
     ESMF = None
 skip_esmf = unittest.skipIf(
     condition=ESMF is None,
@@ -77,13 +79,13 @@ def _make_test_cube(shape, xlims, ylims, pole_latlon=None):
 
     co_x = iris.coords.DimCoord(xvals,
                                 standard_name=coordname_prefix + 'longitude',
-                                units=iris.unit.Unit('degrees'),
+                                units=cf_units.Unit('degrees'),
                                 coord_system=cs)
     co_x.guess_bounds()
     cube.add_dim_coord(co_x, 1)
     co_y = iris.coords.DimCoord(yvals,
                                 standard_name=coordname_prefix + 'latitude',
-                                units=iris.unit.Unit('degrees'),
+                                units=cf_units.Unit('degrees'),
                                 coord_system=cs)
     co_y.guess_bounds()
     cube.add_dim_coord(co_y, 0)
@@ -126,22 +128,6 @@ def _donothing_context_manager():
 
 @skip_esmf
 class TestConservativeRegrid(tests.IrisTest):
-    @classmethod
-    def setUpClass(cls):
-        # Pre-initialise ESMF, just to avoid warnings about no logfile.
-        # NOTE: noisy if logging is off, and no control of filepath.  Boo!!
-        if ESMF is not None:
-            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
-            cls._emsf_logfile_path = os.path.join(os.getcwd(), 'ESMF_LogFile')
-            ESMF.Manager(logkind=ESMF.LogKind.SINGLE, debug=False)
-
-    @classmethod
-    def tearDownClass(cls):
-        # remove the logfile if we can, just to be tidy
-        if ESMF is not None:
-            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
-            if os.path.exists(cls._emsf_logfile_path):
-                os.remove(cls._emsf_logfile_path)
 
     def setUp(self):
         # Compute basic test data cubes.
@@ -238,6 +224,7 @@ class TestConservativeRegrid(tests.IrisTest):
                                [True, False, False, False, True],
                                [True, True, True, True, True]])
 
+    @tests.skip_data
     def test_multidimensional(self):
         """
         Check valid operation on a multidimensional cube.
@@ -265,8 +252,8 @@ class TestConservativeRegrid(tests.IrisTest):
         ylims = _minmax(c1.coord(axis='y').contiguous_bounds())
         # Reduce the dimensions slightly to avoid NaNs in regridded orography
         delta = 0.05
-            # NOTE: this is *not* a small amount.  Think there is a bug.
-            # NOTE: See https://github.com/SciTools/iris/issues/458
+        # || NOTE: this is *not* a small amount.  Think there is a bug.
+        # || NOTE: See https://github.com/SciTools/iris/issues/458
         xlims = np.interp([delta, 1.0 - delta], [0, 1], xlims)
         ylims = np.interp([delta, 1.0 - delta], [0, 1], ylims)
         pole_latlon = (c1_cs.grid_north_pole_latitude,
@@ -373,7 +360,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c2.add_dim_coord(x_coord_2, 1)
 
         # NOTE: at present, this causes an error inside ESMF ...
-        context = self.assertRaises(NameError)
+        context = self.assertRaises(ValueError)
         global_cell_supported = False
         if global_cell_supported:
             context = _donothing_context_manager()
@@ -409,12 +396,10 @@ class TestConservativeRegrid(tests.IrisTest):
         c1x1 = regrid_conservative_via_esmpy(c1, c1x1_gridcube)
         c1x1_areasum = _cube_area_sum(c1x1)
         # Check the total area sum is still the same
-        # NOTE: at present, this causes an error inside ESMF ...
-        context = self.assertRaises(AssertionError)
         condense_to_1x1_supported = False
+        # NOTE: currently disabled (ESMF gets this wrong)
+        # NOTE ALSO: call hits numpy 1.7 bug in testing.assert_array_compare.
         if condense_to_1x1_supported:
-            context = _donothing_context_manager()
-        with context:
             self.assertArrayAllClose(c1x1_areasum, c1_areasum)
 
         # Condense entire region onto a single cell covering the area of 'c2'
@@ -422,11 +407,11 @@ class TestConservativeRegrid(tests.IrisTest):
         ylims2 = _minmax(c2.coord(axis='y').bounds)
         x_c2x1 = iris.coords.DimCoord(xlims2[0], bounds=xlims2,
                                       standard_name='longitude',
-                                      units=iris.unit.Unit('degrees'),
+                                      units=cf_units.Unit('degrees'),
                                       coord_system=_PLAIN_GEODETIC_CS)
         y_c2x1 = iris.coords.DimCoord(ylims2[0], bounds=ylims2,
                                       standard_name='latitude',
-                                      units=iris.unit.Unit('degrees'),
+                                      units=cf_units.Unit('degrees'),
                                       coord_system=_PLAIN_GEODETIC_CS)
         c2x1_gridcube = iris.cube.Cube([[0.0]])
         c2x1_gridcube.add_dim_coord(y_c2x1, 0)
@@ -495,7 +480,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c1toc2 = regrid_conservative_via_esmpy(c1, c2)
 
         # Now redo with dst longitudes rotated, so 'seam' is somewhere else.
-        x2_shift_steps = int(shape2[0] / 3)
+        x2_shift_steps = shape2[0] // 3
         xlims2_shifted = np.array(xlims_2) + 360.0 * x2_shift_steps / shape2[0]
         c2_shifted = _make_test_cube(shape2, xlims2_shifted, ylims_2,
                                      pole_latlon=(47.4, 25.7))
@@ -506,7 +491,7 @@ class TestConservativeRegrid(tests.IrisTest):
         self.assertArrayAllClose(rolled_data, c1toc2.data)
 
         # Repeat with rolled *source* data : result should be identical
-        x1_shift_steps = int(shape1[0] / 3)
+        x1_shift_steps = shape1[0] // 3
         x_shift_degrees = 360.0 * x1_shift_steps / shape1[0]
         xlims1_shifted = [x - x_shift_degrees for x in xlims1]
         c1_shifted = _make_test_cube(shape1, xlims1_shifted, ylims1)

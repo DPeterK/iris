@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before
 # importing anything else
@@ -34,8 +36,7 @@ def mock_nimrod_field():
 
 
 class TestLoad(tests.IrisTest):
-
-    @iris.tests.skip_data
+    @tests.skip_data
     def test_multi_field_load(self):
         # load a cube with two fields
         cube = iris.load(tests.get_data_path(

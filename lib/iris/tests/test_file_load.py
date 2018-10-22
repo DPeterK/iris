@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -19,12 +19,15 @@ Test the file loading mechanism.
 
 """
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
 import iris
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestFileLoad(tests.IrisTest):
     def _test_file(self, src_path, reference_filename):
         """

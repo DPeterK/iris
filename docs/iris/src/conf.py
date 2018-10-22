@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2013, Met Office
+# (C) British Crown Copyright 2010 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # -*- coding: utf-8 -*-
 #
@@ -29,7 +31,9 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-import sys, os
+import datetime
+import os
+import sys
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -44,8 +48,7 @@ sys.path.append(os.path.abspath(os.path.join('developers_guide')))
 
 # Temporary value for use by LaTeX and 'man' output.
 # Deleted at the end of the module.
-_authors = ('Byron Blay', 'Ed Campbell', 'Philip Elson', 'Richard Hattersley',
-            'Bill Little')
+_authors = ('Iris developers')
 
 # If your documentation needs a minimal Sphinx version, state it here.
 #needs_sphinx = '1.0'
@@ -53,24 +56,29 @@ _authors = ('Byron Blay', 'Ed Campbell', 'Philip Elson', 'Richard Hattersley',
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.autodoc',
-              'sphinx.ext.coverage',
-              'sphinx.ext.pngmath',
               'sphinx.ext.autosummary',
-              'sphinx.ext.graphviz',
-              'sphinx.ext.intersphinx',
+              'sphinx.ext.coverage',
               'sphinx.ext.doctest',
+              'sphinx.ext.extlinks',
+              'sphinx.ext.graphviz',
+              'sphinx.ext.imgmath',
+              'sphinx.ext.intersphinx',
               'matplotlib.sphinxext.mathmpl',
               'matplotlib.sphinxext.only_directives',
-
-              #'matplotlib.sphinxext.plot_directive',
-              'plot_directive',
+              'matplotlib.sphinxext.plot_directive',
 
               # better class documentation
               'custom_class_autodoc',
 
+              # Data instance __repr__ filter.
+              'custom_data_autodoc',
+
               'gen_example_directory',
               'generate_package_rst',
               'gen_gallery',
+
+              # Add labels to figures automatically
+              'auto_label_figures',
               ]
 
 # list of packages to document
@@ -92,7 +100,8 @@ master_doc = 'contents'
 project = u'Iris'
 # define the copyright information for latex builds. Note, for html builds,
 # the copyright exists directly inside "_templates/layout.html"
-copyright = u'British Crown Copyright 2010 - 2013, Met Office'
+upper_copy_year = datetime.datetime.now().year
+copyright = u'British Crown Copyright 2010 - {}, Met Office'.format(upper_copy_year)
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -139,20 +148,28 @@ exclude_patterns = ['sphinxext', 'build']
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
 
-# Definer the default highlight language. This also allows the >>> removal
+# Define the default highlight language. This also allows the >>> removal
 # javascript (copybutton.js) to function.
-highlight_language = 'python'
+highlight_language = 'default'
 
 # A list of ignored prefixes for module index sorting.
 modindex_common_prefix = ['iris']
 
 intersphinx_mapping = {
-   'python': ('http://docs.python.org/2.7', None),
-   'numpy': ('http://docs.scipy.org/doc/numpy/', None),
-   'scipy': ('http://docs.scipy.org/doc/scipy/reference/', None),
-   'matplotlib': ('http://matplotlib.sourceforge.net/', None),
+    'cartopy': ('http://scitools.org.uk/cartopy/docs/latest/', None),
+    'iris-grib': ('http://iris-grib.readthedocs.io/en/latest/', None),
+    'matplotlib': ('http://matplotlib.org/', None),
+    'numpy': ('http://docs.scipy.org/doc/numpy/', None),
+    'python': ('http://docs.python.org/2.7', None),
+    'scipy': ('http://docs.scipy.org/doc/scipy/reference/', None),
 }
 
+# -- Extlinks extension -------------------------------------------------------
+
+extlinks = {'issue': ('https://github.com/SciTools/iris/issues/%s',
+                      'Issue #'),
+            'pull': ('https://github.com/SciTools/iris/pull/%s', 'PR #'),
+            }
 
 # -- Doctest ------------------------------------------------------------------
 
@@ -178,6 +195,8 @@ html_theme = 'sphinxdoc'
 # further.  For a list of options available for each theme, see the
 # documentation.
 #html_theme_options = {}
+
+html_context = {'copyright_years': '2010 - {}'.format(upper_copy_year)}
 
 # Add any paths that contain custom themes here, relative to this directory.
 html_theme_path = []

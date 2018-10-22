@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -18,15 +18,18 @@
 Provides an interface to manage URI scheme support in iris.
 
 """
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
+
+from collections import OrderedDict
 import glob
 import os.path
-import types
 import re
-import warnings
 import collections
 
 import iris.fileformats
-import iris.fileformats.dot
 import iris.cube
 import iris.exceptions
 
@@ -35,9 +38,9 @@ import iris.exceptions
 class _SaversDict(dict):
     """A dictionary that can only have string keys with no overlap."""
     def __setitem__(self, key, value):
-        if not isinstance(key, basestring):
+        if not isinstance(key, six.string_types):
             raise ValueError("key is not a string")
-        if key in self.keys():
+        if key in self:
             raise ValueError("A saver already exists for", key)
         for k in self.keys():
             if k.endswith(key) or key.endswith(k):
@@ -57,6 +60,7 @@ def run_callback(callback, cube, field, filename):
     * callback:
         A function to add metadata from the originating field and/or URI which
         obeys the following rules:
+
             1. Function signature must be: ``(cube, field, filename)``.
             2. Modifies the given cube inplace, unless a new cube is
                returned by the function.
@@ -101,22 +105,22 @@ def decode_uri(uri, default='file'):
 
     Examples:
         >>> from iris.io import decode_uri
-        >>> print decode_uri('http://www.thing.com:8080/resource?id=a:b')
+        >>> print(decode_uri('http://www.thing.com:8080/resource?id=a:b'))
         ('http', '//www.thing.com:8080/resource?id=a:b')
 
-        >>> print decode_uri('file:///data/local/dataZoo/...')
+        >>> print(decode_uri('file:///data/local/dataZoo/...'))
         ('file', '///data/local/dataZoo/...')
 
-        >>> print decode_uri('/data/local/dataZoo/...')
+        >>> print(decode_uri('/data/local/dataZoo/...'))
         ('file', '/data/local/dataZoo/...')
 
-        >>> print decode_uri('file:///C:\data\local\dataZoo\...')
+        >>> print(decode_uri('file:///C:\data\local\dataZoo\...'))
         ('file', '///C:\\data\\local\\dataZoo\\...')
 
-        >>> print decode_uri('C:\data\local\dataZoo\...')
+        >>> print(decode_uri('C:\data\local\dataZoo\...'))
         ('file', 'C:\\data\\local\\dataZoo\\...')
 
-        >>> print decode_uri('dataZoo/...')
+        >>> print(decode_uri('dataZoo/...'))
         ('file', 'dataZoo/...')
 
     '''
@@ -144,31 +148,41 @@ def expand_filespecs(file_specs):
         File paths which may contain '~' elements or wildcards.
 
     Returns:
-        A list of matching file paths.  If any of the file-specs matches no
-        existing files, an exception is raised.
+        A well-ordered list of matching absolute file paths.
+        If any of the file-specs match no existing files, an
+        exception is raised.
 
     """
     # Remove any hostname component - currently unused
-    filenames = [os.path.expanduser(fn[2:] if fn.startswith('//') else fn)
+    filenames = [os.path.abspath(os.path.expanduser(
+                    fn[2:] if fn.startswith('//') else fn))
                  for fn in file_specs]
 
     # Try to expand all filenames as globs
-    glob_expanded = {fn : sorted(glob.glob(fn)) for fn in filenames}
+    glob_expanded = OrderedDict([[fn, sorted(glob.glob(fn))]
+                                 for fn in filenames])
 
     # If any of the specs expanded to an empty list then raise an error
-    value_lists = glob_expanded.viewvalues()
-    if not all(value_lists):
-        raise IOError("One or more of the files specified did not exist %s." %
-        ["%s expanded to %s" % (pattern, expanded if expanded else "empty")
-         for pattern, expanded in glob_expanded.iteritems()])
+    all_expanded = glob_expanded.values()
 
-    return sum(value_lists, [])
+    if not all(all_expanded):
+        msg = "One or more of the files specified did not exist:"
+        for pattern, expanded in six.iteritems(glob_expanded):
+            if expanded:
+                msg += '\n    - "{}" matched {} file(s)'.format(pattern,
+                                                                len(expanded))
+            else:
+                msg += '\n    * "{}" didn\'t match any files'.format(pattern)
+        raise IOError(msg)
+
+    return [fname for fnames in all_expanded for fname in fnames]
 
 
-def load_files(filenames, callback):
+def load_files(filenames, callback, constraints=None):
     """
     Takes a list of filenames which may also be globs, and optionally a
-    callback function, and returns a generator of Cubes from the given files.
+    constraint set and a callback function, and returns a
+    generator of Cubes from the given files.
 
     .. note::
 
@@ -181,14 +195,20 @@ def load_files(filenames, callback):
     # Create default dict mapping iris format handler to its associated filenames
     handler_map = collections.defaultdict(list)
     for fn in all_file_paths:
-        with open(fn) as fh:
+        with open(fn, 'rb') as fh:
             handling_format_spec = iris.fileformats.FORMAT_AGENT.get_spec(os.path.basename(fn), fh)
             handler_map[handling_format_spec].append(fn)
 
     # Call each iris format handler with the approriate filenames
-    for handling_format_spec, fnames in handler_map.iteritems():
-        for cube in handling_format_spec.handler(fnames, callback):
-            yield cube
+    for handling_format_spec in sorted(handler_map):
+        fnames = handler_map[handling_format_spec]
+        if handling_format_spec.constraint_aware_handler:
+            for cube in handling_format_spec.handler(fnames, callback,
+                                                     constraints):
+                yield cube
+        else:
+            for cube in handling_format_spec.handler(fnames, callback):
+                yield cube
 
 
 def load_http(urls, callback):
@@ -209,9 +229,38 @@ def load_http(urls, callback):
         handler_map[handling_format_spec].append(url)
 
     # Call each iris format handler with the appropriate filenames
-    for handling_format_spec, fnames in handler_map.iteritems():
+    for handling_format_spec in sorted(handler_map):
+        fnames = handler_map[handling_format_spec]
         for cube in handling_format_spec.handler(fnames, callback):
             yield cube
+
+
+def _dot_save(cube, target):
+    # A simple wrapper for `iris.fileformats.dot.save` which allows the
+    # saver to be registered without triggering the import of
+    # `iris.fileformats.dot`.
+    import iris.fileformats.dot
+    return iris.fileformats.dot.save(cube, target)
+
+
+def _dot_save_png(cube, target, **kwargs):
+    # A simple wrapper for `iris.fileformats.dot.save_png` which allows the
+    # saver to be registered without triggering the import of
+    # `iris.fileformats.dot`.
+    import iris.fileformats.dot
+    return iris.fileformats.dot.save_png(cube, target, **kwargs)
+
+
+def _grib_save(cube, target, append=False, **kwargs):
+    # A simple wrapper for the grib save routine, which allows the saver to be
+    # registered without having the grib implementation installed.
+    try:
+        from iris_grib import save_grib2
+    except ImportError:
+        raise RuntimeError('Unable to save GRIB file - '
+                           '"iris_grib" package is not installed.')
+
+    save_grib2(cube, target, append, **kwargs)
 
 
 def _check_init_savers():
@@ -220,9 +269,9 @@ def _check_init_savers():
     if "pp" not in _savers:
         _savers.update({"pp": iris.fileformats.pp.save,
                         "nc": iris.fileformats.netcdf.save,
-                        "dot": iris.fileformats.dot.save,
-                        "dotpng": iris.fileformats.dot.save_png,
-                        "grib2": iris.fileformats.grib.save_grib2})
+                        "dot": _dot_save,
+                        "dotpng": _dot_save_png,
+                        "grib2": _grib_save})
 
 
 def add_saver(file_extension, new_saver):
@@ -279,9 +328,9 @@ def save(source, target, saver=None, **kwargs):
 
         * netCDF - the Unidata network Common Data Format:
             * see :func:`iris.fileformats.netcdf.save`
-        * GRIB2  - the WMO GRIdded Binary data format;
-            * see :func:`iris.fileformats.grib.save_grib2`
-        * PP     - the Met Office UM Post Processing Format.
+        * GRIB2 - the WMO GRIdded Binary data format:
+            * see :func:`iris_grib.save_grib2`.
+        * PP - the Met Office UM Post Processing Format:
             * see :func:`iris.fileformats.pp.save`
 
     A custom saver can be provided to the function to write to a different
@@ -297,11 +346,12 @@ def save(source, target, saver=None, **kwargs):
 
     Kwargs:
 
-        * saver     - Optional. Specifies the save function to use.
+        * saver     - Optional. Specifies the file format to save.
                       If omitted, Iris will attempt to determine the format.
 
-                      This keyword can be used to implement a custom save
-                      format. Function form must be:
+                      If a string, this is the recognised filename extension
+                      (where the actual filename may not have it).
+                      Otherwise the value is a saver function, of the form:
                       ``my_saver(cube, target)`` plus any custom keywords. It
                       is assumed that a saver will accept an ``append`` keyword
                       if it's file format can handle multiple cubes. See also
@@ -322,16 +372,33 @@ def save(source, target, saver=None, **kwargs):
         # Save a cube to netCDF, defaults to NETCDF4 file format
         iris.save(my_cube, "myfile.nc")
 
-        # Save a cube list to netCDF, using the NETCDF4_CLASSIC storage option
+        # Save a cube list to netCDF, using the NETCDF3_CLASSIC storage option
         iris.save(my_cube_list, "myfile.nc", netcdf_format="NETCDF3_CLASSIC")
+
+    .. warning::
+
+       Saving a cube whose data has been loaded lazily
+       (if `cube.has_lazy_data()` returns `True`) to the same file it expects
+       to load data from will cause both the data in-memory and the data on
+       disk to be lost.
+
+       .. code-block:: python
+
+          cube = iris.load_cube('somefile.nc')
+          # The next line causes data loss in 'somefile.nc' and the cube.
+          iris.save(cube, 'somefile.nc')
+
+       In general, overwriting a file which is the source for any lazily loaded
+       data can result in corruption. Users should proceed with caution when
+       attempting to overwrite an existing file.
 
     """
     # Determine format from filename
-    if isinstance(target, basestring) and saver is None:
+    if isinstance(target, six.string_types) and saver is None:
         saver = find_saver(target)
-    elif isinstance(target, types.FileType) and saver is None:
+    elif hasattr(target, 'name') and saver is None:
         saver = find_saver(target.name)
-    elif isinstance(saver, basestring):
+    elif isinstance(saver, six.string_types):
         saver = find_saver(saver)
     if saver is None:
         raise ValueError("Cannot save; no saver")
@@ -343,7 +410,7 @@ def save(source, target, saver=None, **kwargs):
     # CubeList or sequence of cubes?
     elif (isinstance(source, iris.cube.CubeList) or
           (isinstance(source, (list, tuple)) and
-           all([type(i) == iris.cube.Cube for i in source]))):
+           all([isinstance(i, iris.cube.Cube) for i in source]))):
         # Only allow cubelist saving for those fileformats that are capable.
         if not 'iris.fileformats.netcdf' in saver.__module__:
             # Make sure the saver accepts an append keyword

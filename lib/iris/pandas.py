@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,18 +20,26 @@ Provide conversion to and from Pandas data structures.
 See also: http://pandas.pydata.org/
 
 """
-from __future__ import absolute_import
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import datetime
 
-import netcdftime
+import cf_units
+from cf_units import Unit
+import cftime
 import numpy as np
+import numpy.ma as ma
 import pandas
+try:
+    from pandas.core.indexes.datetimes import DatetimeIndex  # pandas >=0.20
+except ImportError:
+    from pandas.tseries.index import DatetimeIndex  # pandas <0.20
 
 import iris
 from iris.coords import AuxCoord, DimCoord
 from iris.cube import Cube
-from iris.unit import Unit
 
 
 def _add_iris_coord(cube, name, points, dim, calendar=None):
@@ -43,15 +51,15 @@ def _add_iris_coord(cube, name, points, dim, calendar=None):
     """
     units = Unit("unknown")
     if calendar is None:
-        calendar = iris.unit.CALENDAR_GREGORIAN
+        calendar = cf_units.CALENDAR_GREGORIAN
 
     # Convert pandas datetime objects to python datetime obejcts.
-    if isinstance(points, pandas.tseries.index.DatetimeIndex):
-        points = np.array([i.to_datetime() for i in points])
+    if isinstance(points, DatetimeIndex):
+        points = np.array([i.to_pydatetime() for i in points])
 
     # Convert datetime objects to Iris' current datetime representation.
     if points.dtype == object:
-        dt_types = (datetime.datetime, netcdftime.datetime)
+        dt_types = (datetime.datetime, cftime.datetime)
         if all([isinstance(i, dt_types) for i in points]):
             units = Unit("hours since epoch", calendar=calendar)
             points = units.date2num(points)
@@ -86,8 +94,8 @@ def as_cube(pandas_array, copy=True, calendars=None):
 
     Example usage::
 
-        as_cube(series, calendars={0: iris.unit.CALENDAR_360_DAY})
-        as_cube(data_frame, calendars={1: iris.unit.CALENDAR_GREGORIAN})
+        as_cube(series, calendars={0: cf_units.CALENDAR_360_DAY})
+        as_cube(data_frame, calendars={1: cf_units.CALENDAR_GREGORIAN})
 
     .. note:: This function will copy your data by default.
 
@@ -107,7 +115,7 @@ def as_cube(pandas_array, copy=True, calendars=None):
     _add_iris_coord(cube, "index", pandas_array.index, 0,
                     calendars.get(0, None))
     if pandas_array.ndim == 2:
-        _add_iris_coord(cube, "columns", pandas_array.columns, 1,
+        _add_iris_coord(cube, "columns", pandas_array.columns.values, 1,
                         calendars.get(1, None))
     return cube
 
@@ -122,19 +130,20 @@ def _as_pandas_coord(coord):
 
 def _assert_shared(np_obj, pandas_obj):
     """Ensure the pandas object shares memory."""
-    if hasattr(pandas_obj, 'base'):
-        base = pandas_obj.base
-    else:
-        base = pandas_obj[0].base
-    # Chase the stack of NumPy `base` references back to see if any of
-    # them are our original array.
-    while base is not None:
-        if base is np_obj:
-            return
-        # Take the next step up the stack of `base` references.
-        base = base.base
-    msg = 'Pandas {} does not share memory'.format(type(pandas_obj).__name__)
-    raise AssertionError(msg)
+    values = pandas_obj.values
+
+    def _get_base(array):
+        # Chase the stack of NumPy `base` references back to the original array
+        while array.base is not None:
+            array = array.base
+        return array
+
+    base = _get_base(values)
+    np_base = _get_base(np_obj)
+    if base is not np_base:
+        msg = ('Pandas {} does not share memory'
+               .format(type(pandas_obj).__name__))
+        raise AssertionError(msg)
 
 
 def as_series(cube, copy=True):
@@ -158,7 +167,7 @@ def as_series(cube, copy=True):
 
     """
     data = cube.data
-    if isinstance(data, np.ma.MaskedArray):
+    if ma.isMaskedArray(data):
         if not copy:
             raise ValueError("Masked arrays must always be copied.")
         data = data.astype('f').filled(np.nan)
@@ -204,7 +213,7 @@ def as_data_frame(cube, copy=True):
 
     """
     data = cube.data
-    if isinstance(data, np.ma.MaskedArray):
+    if ma.isMaskedArray(data):
         if not copy:
             raise ValueError("Masked arrays must always be copied.")
         data = data.astype('f').filled(np.nan)

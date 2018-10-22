@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -18,7 +18,9 @@
 Exceptions specific to the Iris package.
 
 """
-import iris.coords
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 
 class IrisError(Exception):
@@ -36,9 +38,16 @@ class CoordinateNotFoundError(KeyError):
     pass
 
 
+class CellMeasureNotFoundError(KeyError):
+    """Raised when a search yields no cell measures."""
+    pass
+
+
 class CoordinateMultiDimError(ValueError):
     """Raised when a routine doesn't support multi-dimensional coordinates."""
     def __init__(self, msg):
+        # N.B. deferred import to avoid a circular import dependency.
+        import iris.coords
         if isinstance(msg, iris.coords.Coord):
             fmt = "Multi-dimensional coordinate not supported: '%s'"
             msg = fmt % msg.name()
@@ -87,6 +96,30 @@ class IgnoreCubeException(IrisError):
     pass
 
 
+class ConcatenateError(IrisError):
+    """
+    Raised when concatenate is expected to produce a single cube, but fails to
+    do so.
+
+    """
+    def __init__(self, differences):
+        """
+        Creates a ConcatenateError with a list of textual descriptions of
+        the differences which prevented a concatenate.
+
+        Args:
+
+        * differences:
+            The list of strings which describe the differences.
+
+        """
+        self.differences = differences
+
+    def __str__(self):
+        return '\n  '.join(['failed to concatenate into a single cube.'] +
+                           list(self.differences))
+
+
 class MergeError(IrisError):
     """
     Raised when merge is expected to produce a single cube, but fails to
@@ -118,4 +151,9 @@ class DuplicateDataError(MergeError):
 
 
 class LazyAggregatorError(Exception):
+    pass
+
+
+class UnitConversionError(IrisError):
+    """Raised when Iris is unable to convert a unit."""
     pass

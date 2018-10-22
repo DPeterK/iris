@@ -29,7 +29,7 @@ In order to find out what has been loaded, the result can be printed:
     >>> import iris
     >>> filename = iris.sample_data_path('uk_hires.pp')
     >>> cubes = iris.load(filename)
-    >>> print cubes
+    >>> print(cubes)
     0: air_potential_temperature / (K)     (time: 3; model_level_number: 7; grid_latitude: 204; grid_longitude: 187)
     1: surface_altitude / (m)              (grid_latitude: 204; grid_longitude: 187)
 
@@ -76,7 +76,7 @@ list indexing can be used:
     >>> cubes = iris.load(filename)
     >>> # get the first cube (list indexing is 0 based)
     >>> air_potential_temperature = cubes[0]
-    >>> print air_potential_temperature
+    >>> print(air_potential_temperature)
     air_potential_temperature / (K)     (time: 3; model_level_number: 7; grid_latitude: 204; grid_longitude: 187)
          Dimension coordinates:
               time                           x                      -                 -                    -
@@ -94,7 +94,8 @@ list indexing can be used:
               forecast_reference_time: 2009-11-19 04:00:00
          Attributes:
               STASH: m01s00i004
-              source: Data from Met Office Unified Model 7.03
+              source: Data from Met Office Unified Model
+              um_version: 7.3
 
 Notice that the result of printing a **cube** is a little more verbose than 
 it was when printing a **list of cubes**. In addition to the very short summary 
@@ -127,6 +128,22 @@ star wildcards can be used::
 
     filename = iris.sample_data_path('GloSea4', '*.pp')
     cubes = iris.load(filename)
+
+
+.. note::
+
+     The cubes returned will not necessarily be in the same order as the 
+     order of the filenames.
+
+Lazy loading
+------------
+
+In fact when Iris loads data from most file types, it normally only reads the
+essential descriptive information or metadata :  the bulk of the actual data
+content will only be loaded later, as it is needed.
+This is referred to as 'lazy' data.  It allows loading to be much quicker, and to occupy less memory.
+
+For more on the benefits, handling and uses of lazy data, see :doc:`Real and Lazy Data </userguide/real_and_lazy_data>`.
 
 
 Constrained loading
@@ -177,7 +194,7 @@ and a list of values can be given to constrain a coordinate to one of
 a collection of values::
 
     filename = iris.sample_data_path('uk_hires.pp')
-    level_10_or_12_fp_6 = iris.Constraint(model_level_number=[10, 16], forecast_period=6)
+    level_10_or_16_fp_6 = iris.Constraint(model_level_number=[10, 16], forecast_period=6)
     cubes = iris.load(filename, level_10_or_16_fp_6)
 
 A common requirement is to limit the value of a coordinate to a specific range, 
@@ -199,6 +216,10 @@ this can be achieved by passing the constraint a function::
 
         bottom_16_levels = lambda cell: cell <= 16
 
+
+Note also the :ref:`warning on equality constraints with floating point coordinates <floating-point-warning>`.
+
+
 Cube attributes can also be part of the constraint criteria. Supposing a 
 cube attribute of ``STASH`` existed, as is the case when loading ``PP`` files, 
 then specific STASH codes can be filtered::
@@ -212,6 +233,20 @@ then specific STASH codes can be filtered::
     For advanced usage there are further examples in the 
     :class:`iris.Constraint` reference documentation. 
 
+
+Constraining a circular coordinate across its boundary
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Occasionally you may need to constrain your cube with a region that crosses the
+boundary of a circular coordinate (this is often the meridian or the dateline /
+antimeridian). An example use-case of this is to extract the entire Pacific Ocean
+from a cube whose longitudes are bounded by the dateline.
+
+This functionality cannot be provided reliably using contraints. Instead you should use the
+functionality provided by :meth:`cube.intersection <iris.cube.Cube.intersection>`
+to extract this region.
+
+
 .. _using-time-constraints:
 
 Constraining on Time
@@ -223,23 +258,19 @@ However, when constraining by time we usually want to test calendar-related
 aspects such as hours of the day or months of the year, so Iris
 provides special features to facilitate this:
 
-Firstly, Iris can be configured so that when it evaluates Constraint
-expressions, it will convert time-coordinate values (points and bounds) from
-numbers into :class:`~datetime.datetime`-like objects for ease of calendar-based
-testing.  This feature is not backwards compatible so for now it must be
-explicitly enabled by setting the "cell_datetime_objects" option in :class:`iris.Future`:
+Firstly, when Iris evaluates Constraint expressions, it will convert time-coordinate 
+values (points and bounds) from numbers into :class:`~datetime.datetime`-like objects
+for ease of calendar-based testing.
 
     >>> filename = iris.sample_data_path('uk_hires.pp')
     >>> cube_all = iris.load_cube(filename, 'air_potential_temperature')
-    >>> print 'All times :\n', cube_all.coord('time')
+    >>> print('All times :\n' + str(cube_all.coord('time')))
     All times :
     DimCoord([2009-11-19 10:00:00, 2009-11-19 11:00:00, 2009-11-19 12:00:00], standard_name='time', calendar='gregorian')
     >>> # Define a function which accepts a datetime as its argument (this is simplified in later examples).
     >>> hour_11 = iris.Constraint(time=lambda cell: cell.point.hour == 11)
-    >>> with iris.FUTURE.context(cell_datetime_objects=True):
-    ...     cube_11 = cube_all.extract(hour_11)
-    ... 
-    >>> print 'Selected times :\n', cube_11.coord('time')
+    >>> cube_11 = cube_all.extract(hour_11)
+    >>> print('Selected times :\n' + str(cube_11.coord('time')))
     Selected times :
     DimCoord([2009-11-19 11:00:00], standard_name='time', calendar='gregorian')
 
@@ -251,9 +282,9 @@ then test only those 'aspects' which the PartialDateTime instance defines:
     >>> import datetime
     >>> from iris.time import PartialDateTime
     >>> dt = datetime.datetime(2011, 3, 7)
-    >>> print dt > PartialDateTime(year=2010, month=6)
+    >>> print(dt > PartialDateTime(year=2010, month=6))
     True
-    >>> print dt > PartialDateTime(month=6)
+    >>> print(dt > PartialDateTime(month=6))
     False
     >>> 
 
@@ -263,9 +294,9 @@ time selections when loading or extracting data.
 The previous constraint example can now be written as:
 
    >>> the_11th_hour = iris.Constraint(time=iris.time.PartialDateTime(hour=11))
-   >>> with iris.FUTURE.context(cell_datetime_objects=True):
-   ...     print iris.load_cube(iris.sample_data_path('uk_hires.pp'),
-   ...                          'air_potential_temperature' & the_11th_hour).coord('time')
+   >>> print(iris.load_cube(
+   ...     iris.sample_data_path('uk_hires.pp'),
+   ...	   'air_potential_temperature' & the_11th_hour).coord('time'))
    DimCoord([2009-11-19 11:00:00], standard_name='time', calendar='gregorian')
 
 A more complex example might be when there exists a time sequence representing the first day of every week
@@ -284,7 +315,7 @@ for many years:
 .. doctest:: timeseries_range
     :options: +NORMALIZE_WHITESPACE, +ELLIPSIS
     
-    >>> print long_ts.coord('time')
+    >>> print(long_ts.coord('time'))
     DimCoord([2007-04-09 00:00:00, 2007-04-16 00:00:00, 2007-04-23 00:00:00,
               ...
               2010-02-01 00:00:00, 2010-02-08 00:00:00, 2010-02-15 00:00:00],
@@ -298,10 +329,9 @@ functionality with PartialDateTime:
 
     >>> st_swithuns_daterange = iris.Constraint(
     ...     time=lambda cell: PartialDateTime(month=7, day=15) < cell < PartialDateTime(month=8, day=25))
-    >>> with iris.FUTURE.context(cell_datetime_objects=True):
-    ...   within_st_swithuns = long_ts.extract(st_swithuns_daterange)
+    >>> within_st_swithuns = long_ts.extract(st_swithuns_daterange)
     ... 
-    >>> print within_st_swithuns.coord('time')
+    >>> print(within_st_swithuns.coord('time'))
     DimCoord([2007-07-16 00:00:00, 2007-07-23 00:00:00, 2007-07-30 00:00:00,
            2007-08-06 00:00:00, 2007-08-13 00:00:00, 2007-08-20 00:00:00,
            2008-07-21 00:00:00, 2008-07-28 00:00:00, 2008-08-04 00:00:00,
@@ -329,7 +359,7 @@ A single cube is loaded in the following example::
 
     >>> filename = iris.sample_data_path('air_temp.pp')
     >>> cube = iris.load_cube(filename)
-    >>> print cube
+    >>> print(cube)
     air_temperature / (K)                 (latitude: 73; longitude: 96)
          Dimension coordinates:
               latitude                           x              -
@@ -366,7 +396,7 @@ in order to run::
     import iris
     filename = iris.sample_data_path('uk_hires.pp')
     air_pot_temp = iris.load_cube(filename, 'air_potential_temperature')
-    print air_pot_temp
+    print(air_pot_temp)
 
 Should the file not produce exactly one cube with a standard name of 
 'air_potential_temperature', an exception will be raised.
@@ -388,23 +418,8 @@ these two cubes into separate variables.
     using *multiple assignment*:
 
         >>> number_one, number_two = [1, 2]
-        >>> print number_one
+        >>> print(number_one)
         1
-        >>> print number_two
+        >>> print(number_two)
         2
 
-
-Saving Iris Cubes
------------------
-
-The :py:func:`iris.save` function saves one or more cubes to a file.
-
-If the filename includes a supported suffix then Iris will use the correct saver
-and the keyword argument `saver` is not required.
-
-    >>> import iris
-    >>> filename = iris.sample_data_path('uk_hires.pp')
-    >>> cubes = iris.load(filename)
-    >>> iris.save(cubes, '/tmp/uk_hires.nc')
-
-Iris is able to save to CF NetCDF (1.5), GRIB (edition 2) and Met Office PP formats.

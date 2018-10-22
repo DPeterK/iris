@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013, Met Office
+# (C) British Crown Copyright 2013 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -19,6 +19,9 @@ Wrapper for animating iris cubes using iris or matplotlib plotting functions
 
 """
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 import warnings
 
 import matplotlib.pyplot as plt
@@ -37,8 +40,12 @@ def animate(cube_iterator, plot_func, fig=None, **kwargs):
         Each animation frame corresponds to each :class:`iris.cube.Cube`
         object. See :meth:`iris.cube.Cube.slices`.
 
-    * plot_func (:mod:`~iris.plot` or :mod:`~iris.quickplot` plot):
-        Plotting function used to animate.
+    * plot_func (:mod:`iris.plot` or :mod:`iris.quickplot` plotting function):
+        Plotting function used to animate. Must accept the signature
+        ``plot_func(cube, vmin=vmin, vmax=vmax, coords=coords)``.
+        :func:`~iris.plot.contourf`, :func:`~iris.plot.contour`,
+        :func:`~iris.plot.pcolor` and :func:`~iris.plot.pcolormesh`
+        all conform to this signature.
 
     Kwargs:
 
@@ -117,7 +124,7 @@ def animate(cube_iterator, plot_func, fig=None, **kwargs):
     vmax = kwargs.pop('vmax', max([cc.data.max() for cc in cubes]))
 
     update = update_animation_iris
-    frames = xrange(len(cubes))
+    frames = range(len(cubes))
 
     return animation.FuncAnimation(fig, update,
                                    frames=frames,

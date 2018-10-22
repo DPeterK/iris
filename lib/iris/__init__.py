@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -57,9 +57,12 @@ All the load functions share very similar arguments:
 
     * constraints:
         Either a single constraint, or an iterable of constraints.
-        Each constraint can be either a CF standard name, an instance of
+        Each constraint can be either a string, an instance of
         :class:`iris.Constraint`, or an instance of
-        :class:`iris.AttributeConstraint`.
+        :class:`iris.AttributeConstraint`.  If the constraint is a string
+        it will be used to match against cube.name().
+
+        .. _constraint_egs:
 
         For example::
 
@@ -91,37 +94,40 @@ All the load functions share very similar arguments:
                     experiment_id, long_name='experiment_id')
                 cube.add_aux_coord(experiment_coord)
 
-Format-specific translation behaviour can be modified by using:
-    :func:`iris.fileformats.pp.add_load_rules`
-
-    :func:`iris.fileformats.grib.add_load_rules`
-
 """
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
+
 import contextlib
+import glob
 import itertools
-import logging
-import os
+import os.path
 import threading
 
 import iris.config
 import iris.cube
 import iris._constraints
+from iris._deprecation import IrisDeprecation, warn_deprecated
 import iris.fileformats
 import iris.io
 
 
+try:
+    import iris_sample_data
+except ImportError:
+    iris_sample_data = None
+
+
 # Iris revision.
-__version__ = '1.7.0-dev'
+__version__ = '2.3.0dev0'
 
 # Restrict the names imported when using "from iris import *"
 __all__ = ['load', 'load_cube', 'load_cubes', 'load_raw',
            'save', 'Constraint', 'AttributeConstraint', 'sample_data_path',
-           'site_configuration', 'Future', 'FUTURE']
-
-
-# When required, log the usage of Iris.
-if iris.config.IMPORT_LOGGER:
-    logging.getLogger(iris.config.IMPORT_LOGGER).info('iris %s' % __version__)
+           'site_configuration', 'Future', 'FUTURE',
+           'IrisDeprecation']
 
 
 Constraint = iris._constraints.Constraint
@@ -131,41 +137,104 @@ AttributeConstraint = iris._constraints.AttributeConstraint
 class Future(threading.local):
     """Run-time configuration controller."""
 
-    def __init__(self, cell_datetime_objects=False):
+    def __init__(self, cell_datetime_objects=True, netcdf_promote=True,
+                 netcdf_no_unlimited=True, clip_latitudes=True):
         """
         A container for run-time options controls.
 
         To adjust the values simply update the relevant attribute from
         within your code. For example::
 
-            iris.FUTURE.cell_datetime_objects = True
+            iris.FUTURE.cell_datetime_objects = False
 
         If Iris code is executed with multiple threads, note the values of
         these options are thread-specific.
 
-        Currently, the only option available is `cell_datetime_objects` which
-        controls whether the :meth:`iris.coords.Coord.cell()` method returns
-        time coordinate values as simple numbers or as time objects with
-        attributes for year, month, day, etc. In particular, this allows one
-        to express certain time constraints using a simpler, more
-        transparent syntax, such as::
+        .. deprecated:: 2.0.0
 
-            # To select all data defined at midday.
-            Constraint(time=lambda cell: cell.point.hour == 12)
+            The option `cell_datetime_objects` is deprecated and will be
+            removed in a future release. `cell_datetime_objects` is set
+            to True by default and should not be altered.
 
-            # To ignore the 29th of February.
-            Constraint(time=lambda cell: cell.point.day != 29 and
-                                         cell.point.month != 2)
+            The option `cell_datetime_objects` controlled whether the
+            :meth:`iris.coords.Coord.cell()` method would return time
+            coordinate values as simple numbers or as time objects with
+            attributes for year, month, day, etc.
 
-        For more details, see :ref:`using-time-constraints`.
+            Cells are now represented as time objects by default, allowing
+            you to express time constraints using a simpler syntax. For
+            example::
+
+                # To select all data defined at midday.
+                Constraint(time=lambda cell: cell.point.hour == 12)
+
+                # To ignore the 29th of February.
+                Constraint(time=lambda cell: cell.point.day != 29 and
+                                             cell.point.month != 2)
+
+            For more details, see :ref:`using-time-constraints`.
+
+        .. deprecated:: 2.0.0
+
+            The option `netcdf_promote` is deprecated and will be removed in a
+            future release and the deprecated code paths this option used to
+            toggle have been removed.
+
+            The option `netcdf_promote` controlled whether the netCDF loader
+            exposed variables that defined reference surfaces for
+            dimensionless vertical coordinates as independent Cubes.
+
+        .. deprecated:: 2.0.0
+
+            The option `netcdf_no_unlimited` is deprecated and will be removed
+            in a future release. The deprecated code paths this option used to
+            toggle have been removed.
+
+            The option `netcdf_no_unlimited` changed the behaviour of the
+            netCDF saver regarding unlimited dimensions. The netCDF saver now
+            sets no dimensions to unlimited.
+
+        .. deprecated:: 2.0.0
+
+            The option `clip_latitudes` is deprecated and will be removed in a
+            future release. `clip_latitudes` is set to True by default and
+            should not be altered.
+
+            The option `clip_latitudes` controlled whether the
+            :meth:`iris.coords.Coord.guess_bounds()` method would limit the
+            guessed bounds to [-90, 90] for latitudes.
+
         """
         self.__dict__['cell_datetime_objects'] = cell_datetime_objects
+        self.__dict__['netcdf_promote'] = netcdf_promote
+        self.__dict__['netcdf_no_unlimited'] = netcdf_no_unlimited
+        self.__dict__['clip_latitudes'] = clip_latitudes
 
     def __repr__(self):
-        return 'Future(cell_datetime_objects={})'.format(
-            self.cell_datetime_objects)
+        msg = ('Future(cell_datetime_objects={}, netcdf_promote={}, '
+               'netcdf_no_unlimited={}, clip_latitudes={})')
+        return msg.format(self.cell_datetime_objects, self.netcdf_promote,
+                          self.netcdf_no_unlimited, self.clip_latitudes)
+
+    deprecated_options = {'cell_datetime_objects': 'warning',
+                          'netcdf_no_unlimited': 'error',
+                          'netcdf_promote': 'error',
+                          'clip_latitudes': 'warning'}
 
     def __setattr__(self, name, value):
+        if name in self.deprecated_options:
+            level = self.deprecated_options[name]
+            if level == 'error' and not value:
+                emsg = ("setting the 'Future' property {prop!r} has been "
+                        "deprecated to be removed in a future release, and "
+                        "deprecated {prop!r} behaviour has been removed. "
+                        "Please remove code that sets this property.")
+                raise AttributeError(emsg.format(prop=name))
+            else:
+                msg = ("setting the 'Future' property {!r} is deprecated "
+                       "and will be removed in a future release. "
+                       "Please remove code that sets this property.")
+                warn_deprecated(msg.format(name))
         if name not in self.__dict__:
             msg = "'Future' object has no attribute {!r}".format(name)
             raise AttributeError(msg)
@@ -182,21 +251,14 @@ class Future(threading.local):
         statement, the previous state is restored.
 
         For example::
-
-            with iris.FUTURE.context():
-                iris.FUTURE.cell_datetime_objects = True
-                # ... code which expects time objects
-
-        Or more concisely::
-
-            with iris.FUTURE.context(cell_datetime_objects=True):
-                # ... code which expects time objects
+            with iris.FUTURE.context(cell_datetime_objects=False):
+                # ... code that expects numbers and not datetimes
 
         """
         # Save the current context
         current_state = self.__dict__.copy()
         # Update the state
-        for name, value in kwargs.iteritems():
+        for name, value in six.iteritems(kwargs):
             setattr(self, name, value)
         try:
             yield
@@ -222,9 +284,9 @@ else:
     _update(site_configuration)
 
 
-def _generate_cubes(uris, callback):
+def _generate_cubes(uris, callback, constraints):
     """Returns a generator of cubes given the URIs and a callback."""
-    if isinstance(uris, basestring):
+    if isinstance(uris, six.string_types):
         uris = [uris]
 
     # Group collections of uris by their iris handler
@@ -235,7 +297,7 @@ def _generate_cubes(uris, callback):
         # Call each scheme handler with the appropriate URIs
         if scheme == 'file':
             part_names = [x[1] for x in groups]
-            for cube in iris.io.load_files(part_names, callback):
+            for cube in iris.io.load_files(part_names, callback, constraints):
                 yield cube
         elif scheme in ['http', 'https']:
             urls = [':'.join(x) for x in groups]
@@ -247,11 +309,11 @@ def _generate_cubes(uris, callback):
 
 def _load_collection(uris, constraints=None, callback=None):
     try:
-        cubes = _generate_cubes(uris, callback)
+        cubes = _generate_cubes(uris, callback, constraints)
         result = iris.cube._CubeFilterCollection.from_cubes(cubes, constraints)
     except EOFError as e:
         raise iris.exceptions.TranslationError(
-            "The file appears empty or incomplete: {!r}".format(e.message))
+            "The file appears empty or incomplete: {!r}".format(str(e)))
     return result
 
 
@@ -308,12 +370,17 @@ def load_cube(uris, constraint=None, callback=None):
     if len(constraints) != 1:
         raise ValueError('only a single constraint is allowed')
 
-    cubes = _load_collection(uris, constraints, callback).merged().cubes()
+    cubes = _load_collection(uris, constraints, callback)
+    cubes = cubes.merged().cubes()
 
-    if len(cubes) != 1:
-        msg = 'Expected exactly one cube, found {}.'.format(len(cubes))
-        raise iris.exceptions.ConstraintMismatchError(msg)
-    return cubes[0]
+    try:
+        cube = cubes.merge_cube()
+    except iris.exceptions.MergeError as e:
+        raise iris.exceptions.ConstraintMismatchError(str(e))
+    except ValueError:
+        raise iris.exceptions.ConstraintMismatchError('no cubes found')
+
+    return cube
 
 
 def load_cubes(uris, constraints=None, callback=None):
@@ -343,7 +410,7 @@ def load_cubes(uris, constraints=None, callback=None):
     collection = _load_collection(uris, constraints, callback).merged()
 
     # Make sure we have exactly one merged cube per constraint
-    bad_pairs = filter(lambda pair: len(pair) != 1, collection.pairs)
+    bad_pairs = [pair for pair in collection.pairs if len(pair) != 1]
     if bad_pairs:
         fmt = '   {} -> {} cubes'
         bits = [fmt.format(pair.constraint, len(pair)) for pair in bad_pairs]
@@ -382,12 +449,39 @@ def load_raw(uris, constraints=None, callback=None):
         An :class:`iris.cube.CubeList`.
 
     """
-    return _load_collection(uris, constraints, callback).cubes()
+    from iris.fileformats.um._fast_load import _raw_structured_loading
+    with _raw_structured_loading():
+        return _load_collection(uris, constraints, callback).cubes()
 
 
 save = iris.io.save
 
 
 def sample_data_path(*path_to_join):
-    """Given the sample data resource, returns the full path to the file."""
-    return os.path.join(iris.config.SAMPLE_DATA_DIR, *path_to_join)
+    """
+    Given the sample data resource, returns the full path to the file.
+
+    .. note::
+
+        This function is only for locating files in the iris sample data
+        collection (installed separately from iris). It is not needed or
+        appropriate for general file access.
+
+    """
+    target = os.path.join(*path_to_join)
+    if os.path.isabs(target):
+        raise ValueError('Absolute paths, such as {!r}, are not supported.\n'
+                         'NB. This function is only for locating files in the '
+                         'iris sample data collection. It is not needed or '
+                         'appropriate for general file access.'.format(target))
+    if iris_sample_data is not None:
+        target = os.path.join(iris_sample_data.path, target)
+    else:
+        raise ImportError("Please install the 'iris-sample-data' package to "
+                          "access sample data.")
+    if not glob.glob(target):
+        raise ValueError('Sample data file(s) at {!r} not found.\n'
+                         'NB. This function is only for locating files in the '
+                         'iris sample data collection. It is not needed or '
+                         'appropriate for general file access.'.format(target))
+    return target

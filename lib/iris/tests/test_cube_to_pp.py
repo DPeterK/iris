@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -15,6 +15,9 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
@@ -22,16 +25,14 @@ import iris.tests as tests
 import os
 import tempfile
 
-import mock
+import cf_units
 import numpy as np
 
-import iris
 import iris.coords
 import iris.coord_systems
-import iris.fileformats.pp as ff_pp
+import iris.fileformats.pp
 from iris.fileformats.pp import PPField3
-import iris.io
-import iris.unit
+from iris.tests import mock
 import iris.tests.pp as pp
 import iris.util
 import iris.tests.stock as stock
@@ -42,7 +43,7 @@ def itab_callback(cube, field, filename):
     cube.add_aux_coord(iris.coords.AuxCoord([field.lbexp], long_name='ExperimentNumber(ITAB)', units='no_unit')) 
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestPPSave(tests.IrisTest, pp.PPTest):
     def test_no_forecast_time(self):
         cube = stock.lat_lon_cube()
@@ -87,29 +88,6 @@ class TestPPSave(tests.IrisTest, pp.PPTest):
         with self.cube_save_test(reference_txt_path, reference_cubes=cubes) as temp_pp_path:
             iris.save(cubes, temp_pp_path)
 
-    def test_user_pp_save_rules(self):
-        # Test pp save rules with user rules.
-        
-        #create a user rules file
-        user_rules_filename = iris.util.create_temp_filename(suffix='.txt')
-        try:
-            with open(user_rules_filename, "wt") as user_rules_file:
-                user_rules_file.write("IF\ncm.standard_name == 'air_temperature'\nTHEN\npp.lbuser[3] = 9222")
-            iris.fileformats.pp.add_save_rules(user_rules_filename)
-            try:
-                #read pp
-                in_filename = tests.get_data_path(('PP', 'simple_pp', 'global.pp'))
-                cubes = iris.load(in_filename, callback=itab_callback)
-
-                reference_txt_path = tests.get_result_path(('cube_to_pp', 'user_rules.txt'))
-                with self.cube_save_test(reference_txt_path, reference_cubes=cubes) as temp_pp_path:
-                    iris.save(cubes, temp_pp_path)
-
-            finally:
-                iris.fileformats.pp.reset_save_rules()
-        finally:
-            os.remove(user_rules_filename)
-
     def test_pp_append_singles(self):
         # Test pp append saving - single cubes.
         
@@ -145,7 +123,7 @@ class TestPPSave(tests.IrisTest, pp.PPTest):
 
     def add_coords_to_cube_and_test(self, coord1, coord2):
         # a wrapper for creating arbitrary 2d cross-sections and run pp-saving tests
-        dataarray = np.arange(16, dtype='>f4').reshape(4,4)
+        dataarray = np.arange(16, dtype='>f4').reshape(4, 4)
         cm = iris.cube.Cube(data=dataarray)
 
         cm.add_dim_coord(coord1, 0)
@@ -191,30 +169,31 @@ class TestPPSave(tests.IrisTest, pp.PPTest):
             
         self.add_coords_to_cube_and_test(
             iris.coords.DimCoord(f.z, long_name='air_pressure', units='hPa', bounds=f.z_bounds),
-            iris.coords.DimCoord(f.y, standard_name='time', units=iris.unit.Unit('days since 0000-01-01 00:00:00', calendar=iris.unit.CALENDAR_360_DAY), bounds=f.y_bounds))
+            iris.coords.DimCoord(f.y, standard_name='time', units=cf_units.Unit('days since 0000-01-01 00:00:00', calendar=cf_units.CALENDAR_360_DAY), bounds=f.y_bounds))
             
         self.add_coords_to_cube_and_test(
             iris.coords.DimCoord(f.z, standard_name='depth', units='m', bounds=f.z_bounds),
-            iris.coords.DimCoord(f.y, standard_name='time', units=iris.unit.Unit('days since 0000-01-01 00:00:00', calendar=iris.unit.CALENDAR_360_DAY), bounds=f.y_bounds))
+            iris.coords.DimCoord(f.y, standard_name='time', units=cf_units.Unit('days since 0000-01-01 00:00:00', calendar=cf_units.CALENDAR_360_DAY), bounds=f.y_bounds))
 
     def test_365_calendar_export(self):
         # test for 365 day calendar export
         cube = stock.simple_pp()
-        new_unit = iris.unit.Unit('hours since 1970-01-01 00:00:00',
-                                  calendar=iris.unit.CALENDAR_365_DAY)
+        new_unit = cf_units.Unit('hours since 1970-01-01 00:00:00',
+                                  calendar=cf_units.CALENDAR_365_DAY)
         cube.coord('time').units = new_unit
+        # Add an extra "fill_value" property, as used by the save rules.
+        cube.fill_value = None
         pp_field = mock.MagicMock(spec=PPField3)
-        iris.fileformats.pp._ensure_save_rules_loaded()
-        iris.fileformats.pp._save_rules.verify(cube, pp_field)
+        iris.fileformats.pp_save_rules.verify(cube, pp_field)
         self.assertEqual(pp_field.lbtim.ic, 4)
 
-            
+
 class FakePPEnvironment(object):
     ''' fake a minimal PP environment for use in cross-section coords, as in PP save rules '''
-    y = [1,2,3,4]
-    z = [111,222,333,444]
-    y_bounds = [[0.9,1.1], [1.9,2.1], [2.9,3.1], [3.9,4.1]]
-    z_bounds = [[110.9,111.1], [221.9,222.1], [332.9,333.1], [443.9,444.1]]
+    y = [1, 2, 3, 4]
+    z = [111, 222, 333, 444]
+    y_bounds = [[0.9, 1.1], [1.9, 2.1], [2.9, 3.1], [3.9, 4.1]]
+    z_bounds = [[110.9, 111.1], [221.9, 222.1], [332.9, 333.1], [443.9, 444.1]]
 
     def geog_cs(self):
         """Return a GeogCS for this PPField.
@@ -255,7 +234,7 @@ class TestPPSaveRules(tests.IrisTest, pp.PPTest):
     def lbproc_from_pp(self, filename):
         # Gets the lbproc field from the ppfile
         pp_file = iris.fileformats.pp.load(filename)
-        field = pp_file.next()
+        field = next(pp_file)
         return field.lbproc
 
     def test_pp_save_rules(self):
@@ -270,7 +249,8 @@ class TestPPSaveRules(tests.IrisTest, pp.PPTest):
             iris.save(ll_cube, temp_filename)
      
             # Check the lbproc is what we expect
-            self.assertEquals(self.lbproc_from_pp(temp_filename), iris.fileformats.pp.lbproc_map[process_desc])
+            self.assertEqual(self.lbproc_from_pp(temp_filename),
+                             iris.fileformats.pp.lbproc_map[process_desc])
 
             os.remove(temp_filename)
 
@@ -280,7 +260,7 @@ class TestPPSaveRules(tests.IrisTest, pp.PPTest):
         # Maps lbproc value to the process flags that should be created
         multiple_map = {sum(bits) : [iris.fileformats.pp.lbproc_map[bit] for bit in bits] for bits in multiple_bit_values}
 
-        for lbproc, descriptions in multiple_map.iteritems():
+        for lbproc, descriptions in six.iteritems(multiple_map):
             ll_cube = stock.lat_lon_cube()
             ll_cube.attributes["ukmo__process_flags"] = descriptions
             
@@ -289,10 +269,11 @@ class TestPPSaveRules(tests.IrisTest, pp.PPTest):
             iris.save(ll_cube, temp_filename)
             
             # Check the lbproc is what we expect
-            self.assertEquals(self.lbproc_from_pp(temp_filename), lbproc)
+            self.assertEqual(self.lbproc_from_pp(temp_filename), lbproc)
 
             os.remove(temp_filename)
-            
+
+    @tests.skip_data
     def test_lbvc(self):
         cube = stock.realistic_4d_no_derived()[0, :4, ...]
         
@@ -313,15 +294,18 @@ class TestPPSaveRules(tests.IrisTest, pp.PPTest):
             self.assertEqual(field.lbvc, lbvc)
             self.assertEqual(field.lblev, lblev)
             self.assertEqual(field.blev, blev)
-        
-        
+
+
 def fields_from_cube(cubes):
     """
     Return an iterator of PP fields generated from saving the given cube(s)
     to a temporary file, and then subsequently loading them again 
     """
     with tempfile.NamedTemporaryFile('w+b', suffix='.pp') as tmp_file:
-        fh = tmp_file.file
+        if six.PY2:
+            fh = tmp_file.file
+        else:
+            fh = tmp_file
         iris.save(cubes, fh, saver='pp')
         
         # make sure the fh is written to disk, and move it back to the
@@ -331,7 +315,7 @@ def fields_from_cube(cubes):
         fh.seek(0)
         
         # load in the saved pp fields and check the appropriate metadata
-        for field in ff_pp.load(tmp_file.name):
+        for field in iris.fileformats.pp.load(tmp_file.name):
             yield field
             
 

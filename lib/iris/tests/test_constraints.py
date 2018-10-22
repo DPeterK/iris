@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -18,10 +18,15 @@
 Test the constrained cube loading mechanism.
 
 """
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
+
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
 
-import biggus
+import datetime
 
 import iris
 import iris.tests.stock as stock
@@ -40,8 +45,11 @@ def workaround_pending_1262(cubes):
             cubes[i] = cube[::-1]
 
 
+@tests.skip_data
 class TestSimple(tests.IrisTest):
-    slices = iris.cube.CubeList(stock.realistic_4d().slices(['grid_latitude', 'grid_longitude']))
+    def setUp(self):
+        names = ['grid_latitude', 'grid_longitude']
+        self.slices = iris.cube.CubeList(stock.realistic_4d().slices(names))
 
     def test_constraints(self):
         constraint = iris.Constraint(model_level_number=10)
@@ -52,16 +60,19 @@ class TestSimple(tests.IrisTest):
         sub_list = self.slices.extract(constraint)
         self.assertEqual(len(sub_list), 2 * 6)
 
-        constraint = iris.Constraint(model_level_number=lambda c: ( c > 30 ) | (c <= 3))
+        constraint = iris.Constraint(
+            model_level_number=lambda c: (c > 30) | (c <= 3))
         sub_list = self.slices.extract(constraint)
         self.assertEqual(len(sub_list), 43 * 6)
 
-        constraint = iris.Constraint(coord_values={'model_level_number': lambda c: c > 1000})
+        constraint = iris.Constraint(
+            coord_values={'model_level_number': lambda c: c > 1000})
         sub_list = self.slices.extract(constraint)
         self.assertEqual(len(sub_list), 0)
 
         constraint = (iris.Constraint(model_level_number=10) &
-                      iris.Constraint(time=347922.))
+                      iris.Constraint(
+                          time=datetime.datetime(2009, 9, 9, 18, 0)))
         sub_list = self.slices.extract(constraint)
         self.assertEqual(len(sub_list), 1)
 
@@ -240,7 +251,7 @@ class StrictConstraintMixin(RelaxedConstraintMixin):
         self.assertCML(cubes, 'theta_and_theta_10')
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestCubeLoadConstraint(RelaxedConstraintMixin, tests.IrisTest):
     suffix = 'load_match'
 
@@ -251,7 +262,7 @@ class TestCubeLoadConstraint(RelaxedConstraintMixin, tests.IrisTest):
         return cubes
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestCubeListConstraint(RelaxedConstraintMixin, tests.IrisTest):
     suffix = 'load_match'
 
@@ -262,7 +273,7 @@ class TestCubeListConstraint(RelaxedConstraintMixin, tests.IrisTest):
         return cubes
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestCubeListStrictConstraint(StrictConstraintMixin, tests.IrisTest):
     suffix = 'load_strict'
 
@@ -271,7 +282,7 @@ class TestCubeListStrictConstraint(StrictConstraintMixin, tests.IrisTest):
         return cubes
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestCubeExtract(TestMixin, tests.IrisTest):
     def setUp(self):
         TestMixin.setUp(self)
@@ -325,14 +336,16 @@ class TestCubeExtract(TestMixin, tests.IrisTest):
         self.assertEqual(self.cube.extract(iris.Constraint(wibble=10)), None)
 
 
-@iris.tests.skip_data
+@tests.skip_data
 class TestConstraints(TestMixin, tests.IrisTest):
     def test_constraint_expressions(self):
         rt = repr(self.theta)
         rl10 = repr(self.level_10)
 
         rt_l10 = repr(self.theta & self.level_10)
-        self.assertEqual(rt_l10, "ConstraintCombination(%s, %s, <built-in function __and__>)" % (rt, rl10))
+        expr = 'ConstraintCombination(%s, %s, <built-in function %s>)' % (
+            rt, rl10, '__and__' if six.PY2 else 'and_')
+        self.assertEqual(expr, rt_l10)
 
     def test_string_repr(self):
         rt = repr(iris.Constraint(SN_AIR_POTENTIAL_TEMPERATURE))

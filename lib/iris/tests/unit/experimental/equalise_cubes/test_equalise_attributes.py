@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -19,6 +19,9 @@ Unit tests for the :func:`iris.experimental.equalise_cubes.equalise_attributes`
 function.
 
 """
+
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised
 # before importing anything else.
@@ -132,12 +135,14 @@ class TestEqualiseAttributes(tests.IrisTest):
         cubes = [self.cube_a1b5v1, self.cube_a1b6v1]
         self._test(cubes, {'a': 1, 'v': self.v1})
 
+    @tests.skip_data
     def test_complex_nonecommon(self):
         # Example with cell methods and factories, but no common attributes.
         cubes = [iris.tests.stock.global_pp(),
                  iris.tests.stock.hybrid_height()]
         self._test(cubes, {})
 
+    @tests.skip_data
     def test_complex_somecommon(self):
         # Example with cell methods and factories, plus some common attributes.
         cubes = [iris.tests.stock.global_pp(), iris.tests.stock.simple_pp()]

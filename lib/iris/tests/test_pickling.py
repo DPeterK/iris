@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -18,52 +18,65 @@
 Test pickling of Iris objects.
 
 """
-from __future__ import with_statement
 
-# import iris tests first so that some things can be initialised before importing anything else
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
+# Import iris tests first so that some things can be initialised
+# before importing anything else.
 import iris.tests as tests
 
-import cPickle
-import StringIO
+import six.moves.cPickle as pickle
+import io
 
-import biggus
-import numpy as np
+import cf_units
 
 import iris
+from iris._lazy_data import as_concrete_data
 
 
 class TestPickle(tests.IrisTest):
     def pickle_then_unpickle(self, obj):
-        """Returns a generator of ("cpickle protocol number", object) tuples."""
-        for protocol in xrange(1 + cPickle.HIGHEST_PROTOCOL):
-            str_buffer = StringIO.StringIO()
-            cPickle.dump(obj, str_buffer, protocol)
+        """
+        Returns a generator of ("cpickle protocol number", object) tuples.
 
-            # move the str_buffer back to the start and reconstruct
-            str_buffer.seek(0)
-            reconstructed_obj = cPickle.load(str_buffer)
+        """
+        for protocol in range(1 + pickle.HIGHEST_PROTOCOL):
+            bio = io.BytesIO()
+            pickle.dump(obj, bio, protocol)
+
+            # move the bio back to the start and reconstruct
+            bio.seek(0)
+            reconstructed_obj = pickle.load(bio)
 
             yield protocol, reconstructed_obj
 
+    @staticmethod
+    def _real_data(cube):
+        # Get the concrete data of the cube for performing data values
+        # comparison checks.
+        return as_concrete_data(cube.core_data())
+
     def assertCubeData(self, cube1, cube2):
-        np.testing.assert_array_equal(cube1.lazy_data().ndarray(),
-                                      cube2.lazy_data().ndarray())
+        self.assertArrayEqual(self._real_data(cube1), self._real_data(cube2))
 
-    @iris.tests.skip_data
+    @tests.skip_data
     def test_cube_pickle(self):
-        cube = iris.load_cube(tests.get_data_path(('PP', 'globClim1', 'theta.pp')))
+        cube = iris.load_cube(tests.get_data_path(('PP',
+                                                   'globClim1',
+                                                   'theta.pp')))
         self.assertTrue(cube.has_lazy_data())
-        self.assertCML(cube, ('cube_io', 'pickling', 'theta.cml'), checksum=False)
+        self.assertCML(cube, ('cube_io', 'pickling', 'theta.cml'),
+                       checksum=False)
 
-        for _, recon_cube in self.pickle_then_unpickle(cube):
+        for p, recon_cube in self.pickle_then_unpickle(cube):
             self.assertTrue(recon_cube.has_lazy_data())
-            self.assertCML(recon_cube, ('cube_io', 'pickling', 'theta.cml'), checksum=False)
+            self.assertCML(recon_cube, ('cube_io', 'pickling', 'theta.cml'),
+                           checksum=False)
             self.assertCubeData(cube, recon_cube)
 
-    @iris.tests.skip_data
-    def test_cube_with_deferred_coord_points(self):
-        # Data with 2d lats and lons that when loaded results in points that
-        # are LazyArray objects.
+    @tests.skip_data
+    def test_cube_with_coord_points(self):
         filename = tests.get_data_path(('NetCDF',
                                         'rotated',
                                         'xy',
@@ -74,37 +87,42 @@ class TestPickle(tests.IrisTest):
         _, recon_cube = next(self.pickle_then_unpickle(cube))
         self.assertEqual(recon_cube, cube)
 
-    @iris.tests.skip_data
+    @tests.skip_data
     def test_cubelist_pickle(self):
-        cubelist = iris.load(tests.get_data_path(('PP', 'COLPEX', 'theta_and_orog_subset.pp')))
+        cubelist = iris.load(tests.get_data_path(('PP', 'COLPEX',
+                                                  'theta_and_orog_subset.pp')))
         single_cube = cubelist[0]
 
         self.assertCML(cubelist, ('cube_io', 'pickling', 'cubelist.cml'))
         self.assertCML(single_cube, ('cube_io', 'pickling', 'single_cube.cml'))
 
         for _, reconstructed_cubelist in self.pickle_then_unpickle(cubelist):
-            self.assertCML(reconstructed_cubelist, ('cube_io', 'pickling', 'cubelist.cml'))
-            self.assertCML(reconstructed_cubelist[0], ('cube_io', 'pickling', 'single_cube.cml'))
+            self.assertCML(reconstructed_cubelist, ('cube_io', 'pickling',
+                                                    'cubelist.cml'))
+            self.assertCML(reconstructed_cubelist[0], ('cube_io', 'pickling',
+                                                       'single_cube.cml'))
 
-            for cube_orig, cube_reconstruct in zip(cubelist, reconstructed_cubelist):
+            for cube_orig, cube_reconstruct in zip(cubelist,
+                                                   reconstructed_cubelist):
                 self.assertArrayEqual(cube_orig.data, cube_reconstruct.data)
                 self.assertEqual(cube_orig, cube_reconstruct)
 
     def test_picking_equality_misc(self):
         items_to_test = [
-                        iris.unit.Unit("hours since 2007-01-15 12:06:00", calendar=iris.unit.CALENDAR_STANDARD),
-                        iris.unit.as_unit('1'),
-                        iris.unit.as_unit('meters'),
-                        iris.unit.as_unit('no-unit'),
-                        iris.unit.as_unit('unknown')
+                        cf_units.Unit("hours since 2007-01-15 12:06:00",
+                                      calendar=cf_units.CALENDAR_STANDARD),
+                        cf_units.as_unit('1'),
+                        cf_units.as_unit('meters'),
+                        cf_units.as_unit('no-unit'),
+                        cf_units.as_unit('unknown')
                         ]
 
         for orig_item in items_to_test:
-            for protocol, reconstructed_item in self.pickle_then_unpickle(orig_item):
-                fail_msg = ('Items are different after pickling at protocol %s.'
-                           '\nOrig item: %r\nNew item: %r' % (protocol, orig_item, reconstructed_item)
-                            )
-                self.assertEqual(orig_item, reconstructed_item, fail_msg)
+            for protocol, reconst_item in self.pickle_then_unpickle(orig_item):
+                fail_msg = ('Items are different after pickling '
+                            'at protocol {}.\nOrig item: {!r}\nNew item: {!r}')
+                fail_msg = fail_msg.format(protocol, orig_item, reconst_item)
+                self.assertEqual(orig_item, reconst_item, fail_msg)
 
 
 if __name__ == "__main__":

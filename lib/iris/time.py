@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2018, Met Office
 #
 # This file is part of Iris.
 #
@@ -18,12 +18,11 @@
 Time handling.
 
 """
-import collections
-import datetime
-import functools
-import operator
 
-import netcdftime
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
+import functools
 
 
 @functools.total_ordering
@@ -36,7 +35,7 @@ class PartialDateTime(object):
     Comparisons are defined against any other class with all of the
     attributes: year, month, day, hour, minute, and second.
     Notably, this includes :class:`datetime.datetime` and
-    :class:`netcdftime.datetime`. Comparison also extends to the
+    :class:`cftime.datetime`. Comparison also extends to the
     microsecond attribute for classes, such as
     :class:`datetime.datetime`, which define it.
 

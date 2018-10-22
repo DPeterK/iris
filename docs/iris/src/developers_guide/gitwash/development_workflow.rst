@@ -144,6 +144,12 @@ In more detail
 #. To push the changes up to your forked repo on github, do a ``git
    push`` (see `git push`_).
 
+Testing your changes
+====================
+
+Once you are happy with your changes, work thorough the :ref:`pr_check` and make sure
+your branch passess all the relevant tests.
+
 Ask for your changes to be reviewed or merged
 =============================================
 
@@ -334,7 +340,7 @@ Rewriting commit history
 
    Do this only for your own feature branches.
 
-There's an embarassing typo in a commit you made? Or perhaps the you
+There's an embarrassing typo in a commit you made? Or perhaps the you
 made several false starts you would like the posterity not to see.
 
 This can be done via *interactive rebasing*.

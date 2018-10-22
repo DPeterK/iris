@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2012 - 2014, Met Office
+# (C) British Crown Copyright 2012 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -15,6 +15,9 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+
 # import iris tests first so that some things can be initialised before
 # importing anything else
 import iris.tests as tests
@@ -25,8 +28,8 @@ import iris
 import iris.fileformats.abf
 
 
-@iris.tests.skip_data
-class TestAbfLoad(tests.GraphicsTest):
+@tests.skip_data
+class TestAbfLoad(tests.IrisTest):
     def setUp(self):
         self.path = tests.get_data_path(('abf', 'AVHRRBUVI01.1985apra.abf'))
 
